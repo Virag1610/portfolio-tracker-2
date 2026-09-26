@@ -239,19 +239,20 @@ def daterange(a, b):
 
 
 def wanted_keys(portfolio):
-    """{key: earliest date needed}"""
+    """{key: earliest date needed}. Keys look like NSE:RELIANCE, BSE:500325, IDX:NIFTY 50"""
     keys = {}
     earliest = None
     for p in portfolio.get("portfolios", []):
-        for f in p.get("flows", []):
-            d = parse_date(f["date"])
+        for e in p.get("entries", []):
+            try:
+                d = parse_date(e["date"])
+            except (KeyError, ValueError):
+                continue
             earliest = d if earliest is None or d < earliest else earliest
-        for t in p.get("trades", []):
-            d = parse_date(t["date"])
-            k = f'{t["exch"].upper()}:{str(t["code"]).strip().upper()}'
-            if k not in keys or d < keys[k]:
-                keys[k] = d
-            earliest = d if earliest is None or d < earliest else earliest
+            if e.get("code") and e.get("exch") in ("NSE", "BSE"):
+                k = f'{e["exch"]}:{str(e["code"]).strip().upper()}'
+                if k not in keys or d < keys[k]:
+                    keys[k] = d
     if earliest is not None:
         start = earliest - dt.timedelta(days=10)
         for name in INDICES:
@@ -267,6 +268,7 @@ def main():
 
     portfolio = load_json(PORTFOLIO_FILE, {"portfolios": []})
     prices = load_json(PRICES_FILE, {})
+    before = json.dumps({k: v for k, v in prices.items() if k != "updated_ist"}, sort_keys=True)
     prices.setdefault("series", {})
     prices.setdefault("cov", {})
     prices.setdefault("holidays", [])
@@ -428,8 +430,12 @@ def main():
         return
 
     os.makedirs(DATA, exist_ok=True)
-    with open(PRICES_FILE, "w", encoding="utf-8") as f:
-        json.dump(prices, f, separators=(",", ":"))
+    after = json.dumps({k: v for k, v in prices.items() if k != "updated_ist"}, sort_keys=True)
+    if after != before or not os.path.exists(PRICES_FILE):
+        with open(PRICES_FILE, "w", encoding="utf-8") as f:
+            json.dump(prices, f, separators=(",", ":"))
+    else:
+        log("No new prices")
     with open(SYMBOLS_FILE, "w", encoding="utf-8") as f:
         json.dump(symbols, f, separators=(",", ":"))
     log("Saved", PRICES_FILE, "and", SYMBOLS_FILE)
