@@ -8,9 +8,6 @@ on:
     - cron: "30 16 * * 1-5"   # 10:00 PM IST (final retry)
     - cron: "30 3 * * 2-6"    # 9:00 AM IST next morning (catch-up)
   workflow_dispatch: {}       # "Update prices now" button in the website
-  push:
-    branches: [claude/keen-gates-mlv46n]
-    paths: [scripts/update_prices.py, .github/workflows/update-prices.yml]
 
 permissions:
   contents: write
@@ -28,14 +25,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Probe sources
-        if: github.event_name == 'push'
-        run: python scripts/update_prices.py --probe
       - name: Download official closing prices
-        if: github.event_name != 'push'
         run: python scripts/update_prices.py
       - name: Save to repository
-        if: github.event_name != 'push'
         run: |
           git config user.name "price-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
