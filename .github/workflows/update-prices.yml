@@ -1,0 +1,41 @@
+name: Update prices
+
+# Runs on GitHub's free servers. Times are in UTC (IST = UTC + 5:30).
+on:
+  schedule:
+    - cron: "30 11 * * 1-5"   # 5:00 PM IST, Mon-Fri
+    - cron: "30 13 * * 1-5"   # 7:00 PM IST (retry if exchange files were late)
+    - cron: "30 16 * * 1-5"   # 10:00 PM IST (final retry)
+    - cron: "30 3 * * 2-6"    # 9:00 AM IST next morning (catch-up)
+  workflow_dispatch: {}       # "Update prices now" button in the website
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download official closing prices
+        run: python scripts/update_prices.py
+      - name: Save to repository
+        run: |
+          git config user.name "price-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/prices.json data/symbols.json
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "Update closing prices $(TZ=Asia/Kolkata date +'%Y-%m-%d %H:%M') IST"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((i * 5))
+          done
+          exit 1
