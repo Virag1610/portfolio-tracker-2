@@ -716,8 +716,13 @@ let remoteSha = null, saveTimer = null, syncState = { kind: "local", text: "" };
 
 const utf8b64 = s => { const b = new TextEncoder().encode(s); let bin = ""; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(bin); };
 const b64utf8 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
-const api = p => `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/${p}`;
-const ghHeaders = (raw) => ({ Authorization: `Bearer ${cfg.token}`, Accept: raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" });
+// Owner / repo without spaces or trailing slashes (a trailing slash makes GitHub redirect, which breaks CORS)
+const cleanPart = v => String(v || "").trim().replace(/\/+$/, "");
+const api = p => {
+  const base = `https://api.github.com/repos/${cleanPart(cfg.owner)}/${cleanPart(cfg.repo)}`;
+  return p ? `${base}/${p}` : base;
+};
+const ghHeaders = (raw) => ({ Accept: raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", Authorization: `Bearer ${String(cfg.token || "").trim()}`, "X-GitHub-Api-Version": "2022-11-28" });
 
 async function readRepoFile(path, withSha) {
   if (cfg.token) {
@@ -1408,7 +1413,7 @@ $("#chgForm").addEventListener("change", e => {
 $("#tierForm").addEventListener("change", e => { const i = e.target.dataset.tier; if (i == null) return; data.settings.tiers[i].slip = +e.target.value; persist("Update slippage settings"); computeAll(); renderChrome(); });
 $("#chgReset").addEventListener("click", () => { data.settings.charges = { ...DEFAULT_CHARGES }; data.settings.tiers = DEFAULT_TIERS.map(t => ({ ...t })); persist("Reset cost settings"); renderAll(); });
 $("#ghSave").addEventListener("click", async () => {
-  cfg.owner = $("#ghOwner").value.trim(); cfg.repo = $("#ghRepo").value.trim(); cfg.branch = $("#ghBranch").value.trim() || "main";
+  cfg.owner = $("#ghOwner").value.trim().replace(/\/+$/, ""); cfg.repo = $("#ghRepo").value.trim().replace(/\/+$/, ""); cfg.branch = $("#ghBranch").value.trim() || "main";
   const tok = $("#ghToken").value.trim(); if (tok && !tok.startsWith("••")) cfg.token = tok;
   lsSet(CFG_KEY, cfg);
   $("#ghMsg").innerHTML = `<div class="msg info">Testing…</div>`;
