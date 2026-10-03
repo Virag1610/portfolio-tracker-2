@@ -1,7 +1,56 @@
 {
  "version": 1,
- "updatedAt": 0,
+ "updatedAt": 1791009674676,
  "seq": 1,
- "settings": {},
- "portfolios": []
+ "settings": {
+  "charges": {
+   "brokeragePct": 0,
+   "brokerageMax": 0,
+   "sttPct": 0.1,
+   "stampPct": 0.015,
+   "nseTxnPct": 0.00297,
+   "bseTxnPct": 0.00375,
+   "sebiPerCrore": 10,
+   "gstPct": 18,
+   "dpPerSell": 13,
+   "roundSttStamp": true
+  },
+  "tiers": [
+   {
+    "id": "large",
+    "label": "Large (rank 1-100)",
+    "slip": 0.05
+   },
+   {
+    "id": "mid",
+    "label": "Mid (rank 101-250)",
+    "slip": 0.1
+   },
+   {
+    "id": "small",
+    "label": "Small (rank 251-500)",
+    "slip": 0.2
+   },
+   {
+    "id": "micro",
+    "label": "Micro (rank 501-750)",
+    "slip": 0.35
+   },
+   {
+    "id": "nano",
+    "label": "Nano (beyond rank 750)",
+    "slip": 0.5
+   }
+  ]
+ },
+ "portfolios": [
+  {
+   "entries": [],
+   "benchmark": "NIFTY MICROCAP 250",
+   "id": "21km1qf3a7hg",
+   "name": "microcap",
+   "notes": "",
+   "createdAt": 1790968298596
+  }
+ ]
 }
