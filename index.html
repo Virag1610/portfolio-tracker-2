@@ -254,9 +254,10 @@ details summary { cursor: pointer; color: var(--text-2); }
     <!-- XIRR -->
     <section class="view" id="view-xirr">
       <h1>Money in / out &amp; XIRR</h1>
-      <p class="sub">XIRR treats every rupee you added as money going out of your pocket on that date, every withdrawal as money coming back, and today's portfolio value as money you would get back today. It then finds the one yearly rate that makes all of these balance. The last column proves it: at the XIRR rate, the discounted amounts add up to zero.</p>
+      <p class="sub">Both XIRR figures use only the dates and amounts of your own entries, plus today's value at the latest official closing price. No daily price history is needed. Each table ends with a check row: at the XIRR rate, the discounted amounts add up to zero.</p>
       <div class="grid-tiles" id="xirrTiles"></div>
-      <div class="card"><div class="card-h"><h2>Cash flows used for XIRR</h2><button class="btn sm primary" data-go="add" data-type="DEPOSIT">+ Add or withdraw money</button></div><div class="tbl-wrap"><table id="xirrTbl" class="xirr-table"></table></div></div>
+      <div class="card"><div class="card-h"><div><h2>XIRR: your stock trades</h2><div class="hint">Each buy is money paid on its date (including slippage and charges). Each sale and dividend is money received. The last line is the market value of the shares you still hold (shares x latest close), dated today.</div></div><button class="btn sm primary" data-go="add" data-type="BUY">+ Add buy or sell</button></div><div class="tbl-wrap"><table id="xirrTbl" class="xirr-table"></table></div></div>
+      <div class="card"><div class="card-h"><div><h2>Fund XIRR: money added and withdrawn</h2><div class="hint">Each "add money" is paid in on its date, each withdrawal comes back. The last line is today's total value: shares at the latest close plus idle cash. Idle cash pulls this figure down, as it would in real life.</div></div><button class="btn sm" data-go="add" data-type="DEPOSIT">+ Add or withdraw money</button></div><div class="tbl-wrap"><table id="fundTbl" class="xirr-table"></table></div></div>
     </section>
 
     <!-- COMPARE -->
@@ -455,7 +456,8 @@ function xirr(flows) {
   return roots.reduce((best, r) => (Math.abs(r) < Math.abs(best) ? r : best), roots[0]);
 }
 
-/** Price lookup with carry-forward of the last official close. */
+/** Official closing prices: the stored daily series plus the latest session's full price lists
+ *  (prices.json "latest": NSE by ticker, BSE by scrip code and by ticker, indices by name). */
 class PriceBook {
   constructor(prices) {
     this.meta = prices || {};
@@ -465,20 +467,37 @@ class PriceBook {
       const entries = Object.entries(ser[k].px || {}).sort((a, b) => (a[0] < b[0] ? -1 : 1));
       this.s[k] = { name: ser[k].name, d: entries.map(e => e[0]), v: entries.map(e => e[1]) };
     }
+    this.latest = (prices && prices.latest) || {};
     this.lastDay = prices && prices.last_trading_day || null;
-    this.holidays = new Set((prices && prices.holidays) || []);
+    this._seen = new Set();
   }
-  has(k) { return !!(this.s[k] && this.s[k].d.length); }
+  _ensure(k) { // add the latest session's close for k (works for any listed stock, held or not)
+    if (this._seen.has(k)) return;
+    this._seen.add(k);
+    const at = k.indexOf(":"), ex = k.slice(0, at), code = k.slice(at + 1);
+    const L = this.latest[ex];
+    if (!L || !L.date || !L.close) return;
+    let px = L.close[code];
+    if (px == null && ex === "BSE" && L.symbol_close) px = L.symbol_close[code];
+    if (px == null) return;
+    const s = this.s[k] || (this.s[k] = { name: null, d: [], v: [] });
+    const i = s.d.findIndex(x => x >= L.date);
+    if (i === -1) { s.d.push(L.date); s.v.push(px); }
+    else if (s.d[i] !== L.date) { s.d.splice(i, 0, L.date); s.v.splice(i, 0, px); }
+  }
+  has(k) { this._ensure(k); return !!(this.s[k] && this.s[k].d.length); }
   idx(k, date) { // index of last close on or before date
+    this._ensure(k);
     const s = this.s[k]; if (!s) return -1;
     let lo = 0, hi = s.d.length - 1, ans = -1;
     while (lo <= hi) { const m = (lo + hi) >> 1; if (s.d[m] <= date) { ans = m; lo = m + 1; } else hi = m - 1; }
     return ans;
   }
   close(k, date) { const i = this.idx(k, date); return i < 0 ? null : { px: this.s[k].v[i], date: this.s[k].d[i] }; }
+  next(k, date) { const i = this.idx(k, date) + 1; const s = this.s[k]; return s && i < s.d.length ? { px: s.v[i], date: s.d[i] } : null; }
   exact(k, date) { const i = this.idx(k, date); return i >= 0 && this.s[k].d[i] === date ? this.s[k].v[i] : null; }
   prev(k, date) { const i = this.idx(k, date); const s = this.s[k]; if (i < 0) return null; const j = s.d[i] === date ? i - 1 : i; return j >= 0 ? { px: s.v[j], date: s.d[j] } : null; }
-  dates(k) { return this.s[k] ? this.s[k].d : []; }
+  dates(k) { this._ensure(k); return this.s[k] ? this.s[k].d : []; }
   name(k) { return this.s[k] && this.s[k].name; }
 }
 
@@ -512,18 +531,22 @@ function computePortfolio(p, book, settings, symNames) {
   const entries = sortEntries(p.entries || []);
   const today = todayIST();
   const lastEventDate = entries.length ? entries[entries.length - 1].date : null;
-  let asOf = book.lastDay || lastEventDate || today;
+  // XIRR and value are dated today, using the latest official close of each stock
+  let asOf = today;
   if (lastEventDate && lastEventDate > asOf) asOf = lastEventDate;
   const benchKey = "IDX:" + (p.benchmark || "NIFTY MICROCAP 250");
-  const res = { p, rows: [], errors: [], holdings: [], flows: [], asOf, benchKey, series: [], firstDate: entries.length ? entries[0].date : null };
-  if (!entries.length) return finish(res);
+  const res = { p, rows: [], errors: [], holdings: [], flows: [], tFlows: [], asOf, benchKey, series: [], firstDate: entries.length ? entries[0].date : null };
+  if (!entries.length) return finish(res, book);
 
-  // --- the calendar: every trading day from the first entry to asOf
+  // --- the calendar: trade dates, today, and every day an official close is stored
   const dset = new Set(entries.map(e => e.date));
   const addDates = k => { for (const d of book.dates(k)) if (d >= res.firstDate && d <= asOf) dset.add(d); };
   addDates(benchKey);
-  if (!book.has(benchKey)) for (const e of entries) if (e.code) addDates(keyOf(e));
+  for (const e of entries) if (e.code) addDates(keyOf(e));
   dset.add(asOf);
+  // your own trade prices act as known price points between stored official closes
+  const anchors = {};
+  for (const e of entries) if ((e.type === "BUY" || e.type === "SELL") && e.code) (anchors[keyOf(e)] = anchors[keyOf(e)] || []).push([e.date, +e.price]);
   const dates = [...dset].sort();
 
   let cash = 0, units = 0, nav = 100, bUnits = 0, netInv = 0;
@@ -560,6 +583,7 @@ function computePortfolio(p, book, settings, symNames) {
         const total = c.turnover + c.slippage + c.charges;
         cash -= total; totSlip += c.slippage; totChg += c.charges;
         Object.assign(row, { qty, price, c, net: -total, effPrice: total / qty });
+        res.tFlows.push({ date: e.date, amt: -total, id: e.id, kind: `Buy ${qtyFmt(qty)} ${k}` });
         (lots[k] = lots[k] || []).push({ date: e.date, qty, cps: total / qty, row });
         row.openQty = qty; lastTrade[k] = price; tiers[k] = e.tier;
         if (cash < -EPS) err(`Not enough cash on ${fdate(e.date)}: this buy needs ${inr(total)} but only ${inr(cash + total)} was available.`);
@@ -584,6 +608,7 @@ function computePortfolio(p, book, settings, symNames) {
           if (l.qty <= 1e-9) q.shift();
         }
         const pnl = net - cost; realized += pnl;
+        res.tFlows.push({ date: e.date, amt: net, id: e.id, kind: `Sell ${qtyFmt(qty)} ${k}` });
         Object.assign(row, { qty, price, c, net, effPrice: net / qty, cost, pnl, pnlPct: cost ? pnl / cost : null, holdDays: wDays / qty, minD, maxD });
         break;
       }
@@ -591,6 +616,7 @@ function computePortfolio(p, book, settings, symNames) {
         const h = held(k), amt = h * +e.perShare;
         if (h <= 0) err(`No shares of ${k} held on ${fdate(e.date)}, so no dividend.`);
         cash += amt; dividends += amt; realized += amt;
+        if (amt > 0) res.tFlows.push({ date: e.date, amt, id: e.id, kind: `Dividend ${k}` });
         Object.assign(row, { qty: h, price: +e.perShare, net: amt, pnl: amt });
         break;
       }
@@ -614,9 +640,29 @@ function computePortfolio(p, book, settings, symNames) {
     return row;
   }
 
+  /** Price of k on day d: the official close if stored; on or after the latest session, the latest close;
+   *  otherwise a straight line between the nearest known prices before and after d
+   *  (official closes and your own trade prices). */
   function pxOn(k, d) {
-    const c = book.close(k, d);
-    return c ? c.px : lastTrade[k];
+    const ex = book.exact(k, d);
+    if (ex != null) return ex;
+    const pc = book.close(k, d);
+    if (pc && book.lastDay && d >= book.lastDay) return pc.px;
+    let prev = pc ? [pc.date, pc.px] : null, next = book.next(k, d);
+    next = next ? [next.date, next.px] : null;
+    for (const a of anchors[k] || []) {
+      if (a[0] <= d && (!prev || a[0] > prev[0])) prev = a;
+      if (a[0] > d && (!next || a[0] < next[0])) next = a;
+    }
+    if (prev && prev[0] === d) return prev[1];
+    if (prev && next) {
+      const span = daysBetween(prev[0], next[0]);
+      if (span > 5) res.estimated = true;
+      return prev[1] + (next[1] - prev[1]) * daysBetween(prev[0], d) / span;
+    }
+    if (prev) return prev[1];
+    if (next) return next[1];
+    return lastTrade[k] || 0;
   }
 
   for (const d of dates) {
@@ -638,6 +684,7 @@ function computePortfolio(p, book, settings, symNames) {
     if (units > 1e-9) nav = value / units;
     const bpx = book.close(benchKey, d);
     if (bpx && flow !== 0) bUnits += flow / bpx.px;
+    if (!bpx && flow !== 0) res.benchGap = true; // money added before the stored benchmark history starts
     res.series.push({ d, value, cash, mv, flow, nav, netInv, bench: bpx ? bpx.px : null, bValue: bpx ? bUnits * bpx.px : null });
   }
 
@@ -646,13 +693,14 @@ function computePortfolio(p, book, settings, symNames) {
     const ls = lots[k]; const q = held(k);
     if (q <= 1e-9) continue;
     const cost = ls.reduce((s, l) => s + l.qty * l.cps, 0);
-    const c = book.close(k, asOf), pv = book.prev(k, asOf);
+    const c = book.close(k, asOf), pv = c ? book.prev(k, c.date) : null;
     const last = c ? c.px : lastTrade[k];
     const mv = q * last;
     res.holdings.push({
       key: k, name: nameOf(k), qty: q, cost, avg: cost / q, last, lastDate: c ? c.date : null, mv,
       pnl: mv - cost, pnlPct: cost ? (mv - cost) / cost : null,
-      dayChg: c && pv && c.date === asOf ? c.px / pv.px - 1 : null,
+      dayChg: c && pv && daysBetween(pv.date, c.date) <= 7 ? c.px / pv.px - 1 : null,
+      prevPx: c && pv && daysBetween(pv.date, c.date) <= 7 ? pv.px : null,
       since: ls[0].date, days: ls.reduce((s, l) => s + l.qty * daysBetween(l.date, asOf), 0) / q,
       tier: tiers[k], noPrice: !c,
     });
@@ -663,30 +711,55 @@ function computePortfolio(p, book, settings, symNames) {
     if (r.openQty > 1e-9) { r.pnl = r.openVal - r.openCost; r.pnlPct = r.pnl / r.openCost; r.holdDays = daysBetween(r.date, asOf); r.open = true; }
   }
   Object.assign(res, { cash, realized, dividends, totSlip, totChg, deposits, withdrawals, netInvested: deposits - withdrawals });
-  return finish(res);
+  return finish(res, book);
 }
 
-function finish(res) {
+/** Benchmark XIRR: the same cash flows put into (or taken out of) the index at its close on each date. */
+function benchXirr(flows, book, benchKey, asOf) {
+  if (!flows.length) return { rate: null };
+  let units = 0;
+  for (const f of flows) {
+    const c = book.close(benchKey, f.date);
+    if (!c) return { rate: null, missing: f.date };
+    units -= f.amt / c.px;
+  }
+  const end = book.close(benchKey, asOf);
+  if (!end) return { rate: null };
+  const value = units * end.px;
+  return { rate: xirr(flows.concat([{ date: asOf, amt: value }])), value };
+}
+
+function finish(res, book) {
   const s = res.series, last = s[s.length - 1];
   res.value = last ? last.value : 0;
-  res.mv = last ? last.mv : 0;
+  res.mv = res.holdings.reduce((a, h) => a + h.mv, 0);
   res.cash = res.cash || 0;
   res.gain = res.value - (res.deposits || 0) + (res.withdrawals || 0);
-  const tf = res.flows.slice();
-  if (last && res.value > 0) tf.push({ date: res.asOf, amt: res.value, kind: "Value today" });
+  // XIRR (stocks): every buy as money paid on its date, every sale and dividend as money received,
+  // and today's market value of the shares still held (shares x latest official close)
+  const tf = res.tFlows.slice();
+  if (res.mv > 0) tf.push({ date: res.asOf, amt: res.mv, kind: "Market value of shares today" });
   res.xirrFlows = tf;
   res.xirr = xirr(tf);
+  const bt = benchXirr(res.tFlows, book, res.benchKey, res.asOf);
+  res.bXirr = bt.rate; res.bValue = bt.value; res.benchMissing = bt.missing;
+  // Fund XIRR: money added / withdrawn, and today's total value including idle cash
+  const ff = res.flows.slice();
+  if (last && res.value > 0) ff.push({ date: res.asOf, amt: res.value, kind: "Total value today (shares + cash)" });
+  res.fundFlows = ff;
+  res.fundXirr = xirr(ff);
+  const bf = benchXirr(res.flows, book, res.benchKey, res.asOf);
+  res.bFundXirr = bf.rate; res.bFundValue = bf.value;
   res.twr = last ? last.nav / 100 - 1 : null;
-  if (last && last.bValue != null) {
-    const bf = res.flows.slice(); bf.push({ date: res.asOf, amt: last.bValue, kind: "Benchmark value" });
-    res.bXirr = xirr(bf); res.bValue = last.bValue;
+  if (last && last.bench != null) {
     const first = s.find(x => x.bench != null && x.d >= res.firstDate);
     res.bTwr = first ? last.bench / first.bench - 1 : null;
   }
-  if (s.length >= 2) {
-    const prev = s[s.length - 2];
-    res.dayChg = last.value - prev.value - last.flow;
-    res.dayChgPct = prev.value > 0 ? last.nav / prev.nav - 1 : null;
+  // last session's change, from each stock's latest and previous official close
+  const moved = res.holdings.filter(h => h.prevPx != null && h.lastDate === (book && book.lastDay));
+  if (moved.length) {
+    res.dayChg = moved.reduce((a, h) => a + h.qty * (h.last - h.prevPx), 0);
+    res.dayChgPct = res.value - res.dayChg > 0 ? res.dayChg / (res.value - res.dayChg) : null;
   }
   let peak = -Infinity, mdd = 0;
   for (const x of s) { peak = Math.max(peak, x.nav); mdd = Math.min(mdd, x.nav / peak - 1); }
@@ -891,8 +964,9 @@ function renderChrome() {
   if (r && r.firstDate) {
     const bn = benchLabel(p.benchmark);
     $("#kpis").innerHTML = `
-      <div class="kpi big" title="Annualised return that accounts for the exact dates money was added or withdrawn"><span class="kpi-l">XIRR</span><span class="kpi-v ${cls(r.xirr)}">${r.xirr == null ? "–" : pct(r.xirr)}</span></div>
-      <div class="kpi" title="Same money, same dates, invested in ${esc(bn)}"><span class="kpi-l">${esc(bn)} XIRR</span><span class="kpi-v">${r.bXirr == null ? "–" : pct(r.bXirr)}</span></div>
+      <div class="kpi big" title="Yearly return of your stock trades: buys and sales on their dates, shares valued today at the latest official close"><span class="kpi-l">XIRR</span><span class="kpi-v ${cls(r.xirr)}">${r.xirr == null ? "–" : pct(r.xirr)}</span></div>
+      <div class="kpi" title="Same trades, same dates, in ${esc(bn)}"><span class="kpi-l">${esc(bn)} XIRR</span><span class="kpi-v">${r.bXirr == null ? "–" : pct(r.bXirr)}</span></div>
+      <div class="kpi" title="Money added and withdrawn on their dates, and today's total value including idle cash"><span class="kpi-l">Fund XIRR</span><span class="kpi-v ${cls(r.fundXirr)}">${r.fundXirr == null ? "–" : pct(r.fundXirr)}</span></div>
       <div class="kpi"><span class="kpi-l">Value</span><span class="kpi-v">${inrShort(r.value)}</span></div>
       <div class="kpi"><span class="kpi-l">Total gain</span><span class="kpi-v ${cls(r.gain)}">${r.gain > 0 ? "+" : ""}${inrShort(r.gain)}</span></div>
       <div class="kpi"><span class="kpi-l">Last day</span><span class="kpi-v ${cls(r.dayChg)}">${r.dayChgPct == null ? "–" : pct(r.dayChgPct)}</span></div>
@@ -962,6 +1036,7 @@ const pctFmt = v => (v > 0 ? "+" : "") + v.toFixed(2) + "%";
 const inrFmt = v => inrShort(v);
 
 /* ---------- dashboard ---------- */
+const estNote = r => (r.estimated ? " Where daily closing prices are not stored, stock values are straight lines between your trade prices and the latest official close (estimate)." : "");
 function renderDashboard() {
   const p = curPf();
   if (!p || !results[p.id].firstDate) {
@@ -984,14 +1059,14 @@ function renderDashboard() {
   const start = rangeStart(ui.range, s[0].d, last);
   const win = s.filter(x => x.d >= start);
   if (ui.mode === "ret") {
-    $("#chartHint").textContent = "Time-weighted return: adding or withdrawing money does not move this line; only investment performance does.";
+    $("#chartHint").textContent = "Time-weighted return: adding or withdrawing money does not move this line; only investment performance does." + estNote(r);
     const n0 = win[0].nav, b0 = (win.find(x => x.bench != null) || {}).bench;
     drawLines("dash", $("#chart"), $("#legend"), [
       { name: p.name, color: colorOf(p), pts: win.map(x => ({ time: x.d, value: (x.nav / n0 - 1) * 100 })) },
       { name: bn, color: BENCH_COLOR, dash: true, pts: b0 ? win.filter(x => x.bench != null).map(x => ({ time: x.d, value: (x.bench / b0 - 1) * 100 })) : [] },
     ], pctFmt);
   } else {
-    $("#chartHint").textContent = `Portfolio value vs the same money added on the same dates into ${bn}. Grey line = money you put in (net).`;
+    $("#chartHint").textContent = `Portfolio value vs the same money added on the same dates into ${bn}. Grey line = money you put in (net).` + estNote(r);
     drawLines("dash", $("#chart"), $("#legend"), [
       { name: p.name, color: colorOf(p), pts: win.map(x => ({ time: x.d, value: x.value })) },
       { name: `Same money in ${bn}`, color: BENCH_COLOR, dash: true, pts: win.filter(x => x.bValue != null).map(x => ({ time: x.d, value: x.bValue })) },
@@ -999,7 +1074,8 @@ function renderDashboard() {
     ], inrFmt);
   }
   const tiles = [
-    ["XIRR (yearly)", r.xirr == null ? "–" : `<span class="${cls(r.xirr)}">${pct(r.xirr)}</span>`, `Benchmark ${r.bXirr == null ? "–" : pct(r.bXirr)}`],
+    ["XIRR (stock trades)", r.xirr == null ? "–" : `<span class="${cls(r.xirr)}">${pct(r.xirr)}</span>`, r.bXirr == null ? benchNote(r) : `Benchmark ${pct(r.bXirr)}`],
+    ["Fund XIRR (incl. cash)", r.fundXirr == null ? "–" : `<span class="${cls(r.fundXirr)}">${pct(r.fundXirr)}</span>`, `Benchmark ${r.bFundXirr == null ? "–" : pct(r.bFundXirr)}`],
     ["Beat benchmark by", r.xirr != null && r.bXirr != null ? `<span class="${cls(r.xirr - r.bXirr)}">${pct(r.xirr - r.bXirr)}</span>` : "–", "XIRR difference per year"],
     ["Time-weighted return", `<span class="${cls(r.twr)}">${pct(r.twr)}</span>`, `Benchmark ${pct(r.bTwr)} since ${fdate(r.firstDate)}`],
     ["Current value", inr(r.value, 0), `Money put in ${inr(r.netInvested, 0)}`],
@@ -1100,27 +1176,34 @@ function download(name, text, type) {
 }
 
 /* ---------- xirr ---------- */
+function flowTable(el, flows, rate, emptyMsg) {
+  if (!flows.length) { el.innerHTML = `<tbody><tr><td>${emptyMsg}</td></tr></tbody>`; return; }
+  const d0 = flows.reduce((m, x) => (x.date < m ? x.date : m), flows[0].date);
+  let sumPV = 0;
+  const rows = flows.map(x => {
+    const days = daysBetween(d0, x.date), pv = rate == null ? null : x.amt / Math.pow(1 + rate, days / 365);
+    if (pv != null) sumPV += pv;
+    return `<tr><td>${fdate(x.date)}</td><td class="l" style="text-align:left">${esc(x.kind)}</td><td>${days}</td><td>${inr(x.amt)}</td><td>${pv == null ? "–" : inr(pv)}</td><td>${x.id ? `<button class="icon-btn" data-edit="${esc(x.id)}">✎</button><button class="icon-btn" data-del="${esc(x.id)}">✕</button>` : ""}</td></tr>`;
+  });
+  el.innerHTML = `<thead><tr><th>Date</th><th class="l">What</th><th>Day number</th><th>Cash flow (− paid, + received)</th><th>Discounted at XIRR</th><th></th></tr></thead><tbody>${rows.join("")}</tbody>
+    <tfoot><tr><td>Check</td><td class="l" style="text-align:left">Sum of discounted amounts</td><td></td><td></td><td>${rate == null ? "–" : inr(Math.abs(sumPV) < 0.005 ? 0 : sumPV)}</td><td></td></tr></tfoot>`;
+}
+function benchNote(r) {
+  return r.benchMissing ? `index history starts after ${fdate(r.benchMissing)}` : "";
+}
 function renderXirr() {
   const p = curPf();
-  if (!p) { $("#xirrTbl").innerHTML = `<tbody><tr><td>Create a portfolio first.</td></tr></tbody>`; $("#xirrTiles").innerHTML = ""; return; }
-  const r = results[p.id];
+  if (!p) { $("#xirrTbl").innerHTML = $("#fundTbl").innerHTML = `<tbody><tr><td>Create a portfolio first.</td></tr></tbody>`; $("#xirrTiles").innerHTML = ""; return; }
+  const r = results[p.id], bn = benchLabel(p.benchmark);
   $("#xirrTiles").innerHTML = [
-    ["XIRR", r.xirr == null ? "–" : `<span class="${cls(r.xirr)}">${pct(r.xirr, 4)}</span>`, `${r.days} days since first entry`],
-    ["Money added", inr(r.deposits || 0, 0), `${r.flows.filter(f => f.amt < 0).length} time(s)`],
-    ["Money withdrawn", inr(r.withdrawals || 0, 0), `${r.flows.filter(f => f.amt > 0).length} time(s)`],
-    ["Value today", inr(r.value, 0), `as of ${fdate(r.asOf)}`],
-    [`${benchLabel(p.benchmark)} XIRR`, r.bXirr == null ? "–" : pct(r.bXirr, 4), `same money would be ${inr(r.bValue, 0)}`],
+    ["XIRR (stock trades)", r.xirr == null ? "–" : `<span class="${cls(r.xirr)}">${pct(r.xirr, 4)}</span>`, `shares worth ${inr(r.mv, 0)} today`],
+    [`${bn} XIRR`, r.bXirr == null ? "–" : pct(r.bXirr, 4), r.bXirr == null ? benchNote(r) : `same trades in the index: ${inr(r.bValue, 0)}`],
+    ["Fund XIRR (incl. cash)", r.fundXirr == null ? "–" : `<span class="${cls(r.fundXirr)}">${pct(r.fundXirr, 4)}</span>`, `total value ${inr(r.value, 0)} on ${fdate(r.asOf)}`],
+    [`${bn} fund XIRR`, r.bFundXirr == null ? "–" : pct(r.bFundXirr, 4), r.bFundXirr == null ? "" : `same money in the index: ${inr(r.bFundValue, 0)}`],
+    ["Money added / withdrawn", `${inr(r.deposits || 0, 0)}`, `withdrawn ${inr(r.withdrawals || 0, 0)}`],
   ].map(([l, v, s]) => `<div class="tile"><div class="tile-l">${l}</div><div class="tile-v">${v}</div><div class="tile-s">${s}</div></div>`).join("");
-  const f = r.xirrFlows; if (!f.length) { $("#xirrTbl").innerHTML = `<tbody><tr><td>No money added yet.</td></tr></tbody>`; return; }
-  const d0 = f.reduce((m, x) => (x.date < m ? x.date : m), f[0].date);
-  let sumPV = 0;
-  const rows = f.map(x => {
-    const days = daysBetween(d0, x.date), pv = r.xirr == null ? null : x.amt / Math.pow(1 + r.xirr, days / 365);
-    if (pv != null) sumPV += pv;
-    return `<tr><td>${fdate(x.date)}</td><td class="l" style="text-align:left">${x.kind}</td><td>${days}</td><td>${inr(x.amt)}</td><td>${pv == null ? "–" : inr(pv)}</td><td>${x.id ? `<button class="icon-btn" data-edit="${esc(x.id)}">✎</button><button class="icon-btn" data-del="${esc(x.id)}">✕</button>` : ""}</td></tr>`;
-  });
-  $("#xirrTbl").innerHTML = `<thead><tr><th>Date</th><th class="l">What</th><th>Day number</th><th>Cash flow (− paid in, + got back)</th><th>Discounted at XIRR</th><th></th></tr></thead><tbody>${rows.join("")}</tbody>
-    <tfoot><tr><td>Check</td><td class="l" style="text-align:left">Sum of discounted amounts</td><td></td><td></td><td>${r.xirr == null ? "–" : inr(Math.abs(sumPV) < 0.005 ? 0 : sumPV)}</td><td></td></tr></tfoot>`;
+  flowTable($("#xirrTbl"), r.xirrFlows, r.xirr, "No buys yet.");
+  flowTable($("#fundTbl"), r.fundFlows, r.fundXirr, "No money added yet.");
 }
 
 /* ---------- compare ---------- */
@@ -1142,8 +1225,8 @@ function renderCompare() {
   const b0 = bd.length ? book.exact(bk, bd[0]) : null;
   lines.push({ name: benchLabel(bk.slice(4)), color: BENCH_COLOR, dash: true, pts: b0 ? bd.map(d => ({ time: d, value: (book.exact(bk, d) / b0 - 1) * 100 })) : [] });
   drawLines("cmp", $("#cmpChart"), $("#cmpLegend"), lines, pctFmt);
-  $("#cmpTbl").innerHTML = `<thead><tr><th class="l">Portfolio</th><th class="l">Strategy</th><th>Started</th><th>Money put in</th><th>Value</th><th>Total gain</th><th>XIRR</th><th>Own benchmark XIRR</th><th>Difference</th><th>Time-weighted</th><th>Worst fall</th><th>Stocks</th><th>Cash %</th></tr></thead><tbody>` +
-    data.portfolios.map(p => { const r = results[p.id]; return `<tr><td class="l"><span class="dot" style="background:${colorOf(p)}"></span>${esc(p.name)}</td><td class="l dim" style="white-space:normal;max-width:260px">${esc(p.notes || "")}</td><td>${fdate(r.firstDate)}</td><td>${inr(r.netInvested || 0, 0)}</td><td>${inr(r.value, 0)}</td><td>${signed(r.gain || 0, v => inr(v, 0))}</td><td class="${cls(r.xirr)}">${pct(r.xirr)}</td><td>${pct(r.bXirr)} <span class="dim">${esc(benchLabel(p.benchmark))}</span></td><td class="${cls((r.xirr ?? 0) - (r.bXirr ?? 0))}">${r.xirr != null && r.bXirr != null ? pct(r.xirr - r.bXirr) : "–"}</td><td class="${cls(r.twr)}">${pct(r.twr)}</td><td class="${cls(r.maxDD)}">${pct(r.maxDD)}</td><td>${r.holdings.length}</td><td>${r.value > 0 ? pct(r.cash / r.value, 1, false) : "–"}</td></tr>`; }).join("") + `</tbody>`;
+  $("#cmpTbl").innerHTML = `<thead><tr><th class="l">Portfolio</th><th class="l">Strategy</th><th>Started</th><th>Money put in</th><th>Value</th><th>Total gain</th><th>XIRR</th><th>Own benchmark XIRR</th><th>Difference</th><th>Fund XIRR</th><th>Time-weighted</th><th>Worst fall</th><th>Stocks</th><th>Cash %</th></tr></thead><tbody>` +
+    data.portfolios.map(p => { const r = results[p.id]; return `<tr><td class="l"><span class="dot" style="background:${colorOf(p)}"></span>${esc(p.name)}</td><td class="l dim" style="white-space:normal;max-width:260px">${esc(p.notes || "")}</td><td>${fdate(r.firstDate)}</td><td>${inr(r.netInvested || 0, 0)}</td><td>${inr(r.value, 0)}</td><td>${signed(r.gain || 0, v => inr(v, 0))}</td><td class="${cls(r.xirr)}">${pct(r.xirr)}</td><td>${pct(r.bXirr)} <span class="dim">${esc(benchLabel(p.benchmark))}</span></td><td class="${cls((r.xirr ?? 0) - (r.bXirr ?? 0))}">${r.xirr != null && r.bXirr != null ? pct(r.xirr - r.bXirr) : "–"}</td><td class="${cls(r.fundXirr)}">${pct(r.fundXirr)}</td><td class="${cls(r.twr)}">${pct(r.twr)}</td><td class="${cls(r.maxDD)}">${pct(r.maxDD)}</td><td>${r.holdings.length}</td><td>${r.value > 0 ? pct(r.cash / r.value, 1, false) : "–"}</td></tr>`; }).join("") + `</tbody>`;
 }
 
 /* ---------- add entry ---------- */

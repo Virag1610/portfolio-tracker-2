@@ -2,17 +2,24 @@
 """
 Daily end-of-day price updater for the portfolio tracker.
 
-Runs on GitHub Actions (free). Uses only official exchange files:
+Runs on GitHub Actions (free). Downloads ONLY the latest available trading
+session from these official exchange files (no multi-day back-filling):
   * NSE equity bhavcopy (UDiFF):  nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_YYYYMMDD_F_0000.csv.zip
-  * NSE equity bhavcopy (legacy fallback): nsearchives.nseindia.com/products/content/sec_bhavdata_full_DDMMYYYY.csv
   * BSE equity bhavcopy (UDiFF):  www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_YYYYMMDD_F_0000.CSV
   * NSE index closing values:     nsearchives.nseindia.com/content/indices/ind_close_all_DDMMYYYY.csv
 
-It reads data/portfolio.json to learn which stocks are held (and from which
-date), downloads only the days that are still missing, and writes:
-  * data/prices.json   closing prices of held stocks + benchmark indices
+Writes:
+  * data/prices.json
+      latest.NSE.close         {ticker: close}           every NSE listed share
+      latest.BSE.close         {scrip code: close}       every BSE listed share (e.g. "544342")
+      latest.BSE.symbol_close  {ticker: close}           same BSE prices keyed by BSE ticker
+      latest.IDX.close         {index name: close}       benchmark indices
+      series                   daily closes of held stocks and indices, one new day
+                               added per run (history builds up going forward)
   * data/symbols.json  list of all NSE/BSE codes and names (for lookup in the site)
 
+Every network request has timeout=10 and the whole run stops looking for files
+after a fixed time budget, so it finishes in under 15 seconds.
 Only the Python standard library is used, so nothing needs installing.
 """
 
@@ -21,11 +28,11 @@ import datetime as dt
 import io
 import json
 import os
-import sys
 import time
 import urllib.error
 import urllib.request
 import zipfile
+import threading
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
@@ -36,7 +43,7 @@ SYMBOLS_FILE = os.path.join(DATA, "symbols.json")
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
-# Benchmark indices kept every day (names as NSE prints them, upper-cased).
+# Benchmark indices kept (names as NSE prints them, upper-cased).
 INDICES = [
     "NIFTY MICROCAP 250", "NIFTY SMALLCAP 250", "NIFTY SMALLCAP 100",
     "NIFTY MIDCAP 150", "NIFTY MIDCAP 100", "NIFTY MIDSMALLCAP 400",
@@ -47,16 +54,19 @@ INDICES = [
 # SM/ST/SZ = SME platform, RR = REIT, IV = InvIT)
 NSE_SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST", "SZ", "RR", "IV"]
 
-MAX_BACKFILL_DAYS = 3 * 366  # safety limit per run
+TIMEOUT = 10          # seconds, every request
+BUDGET = 12.0         # seconds spent looking for files, all sources in parallel
+LOOKBACK_DAYS = 6     # how far back to look for the most recent session (weekends, holidays)
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
+START = time.monotonic()
 
 
 class NotPublished(Exception):
-    """File does not exist (holiday, or not published yet)."""
+    """File does not exist for that date (holiday, weekend, not published yet)."""
 
 
 class FetchError(Exception):
-    """Network / blocking problem. Try again on the next run."""
+    """Network problem or out of time. Try again on the next run."""
 
 
 def log(*a):
@@ -64,25 +74,25 @@ def log(*a):
 
 
 def http_get(url, referer):
-    last = None
-    for attempt in range(3):
-        req = urllib.request.Request(url, headers={
-            "User-Agent": UA,
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": referer,
-        })
-        try:
-            with urllib.request.urlopen(req, timeout=40) as r:
-                return r.read()
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                raise NotPublished(url)
-            last = FetchError(f"HTTP {e.code} for {url}")
-        except Exception as e:  # timeouts, resets
-            last = FetchError(f"{type(e).__name__}: {e} for {url}")
-        time.sleep(2 * (attempt + 1))
-    raise last
+    """One attempt, never longer than TIMEOUT and never past the time budget."""
+    left = BUDGET - (time.monotonic() - START)
+    if left <= 0.5:
+        raise FetchError(f"time budget used up before {url}")
+    req = urllib.request.Request(url, headers={
+        "User-Agent": UA,
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": referer,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=min(TIMEOUT, left)) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise NotPublished(url)
+        raise FetchError(f"HTTP {e.code} for {url}")
+    except Exception as e:  # timeouts, resets, DNS
+        raise FetchError(f"{type(e).__name__}: {e} for {url}")
 
 
 def num(x):
@@ -94,110 +104,71 @@ def num(x):
 
 
 def clean_rows(text):
-    rdr = csv.reader(io.StringIO(text))
-    rows = [[c.strip() for c in row] for row in rdr if row]
-    if not rows:
-        return [], []
-    return rows[0], rows[1:]
-
-
-# ---------------------------------------------------------------- sources
-
-def fetch_index_file(d):
-    url = ("https://nsearchives.nseindia.com/content/indices/ind_close_all_"
-           f"{d:%d%m%Y}.csv")
-    raw = http_get(url, "https://www.nseindia.com/")
-    text = raw.decode("utf-8", "replace")
-    head, rows = clean_rows(text)
-    if not head or "Index Name" not in head[0]:
-        raise NotPublished(url)
-    hi = {h: i for i, h in enumerate(head)}
-    ci = hi.get("Closing Index Value")
-    out = {}
-    for r in rows:
-        name = r[0].strip().upper()
-        if name in INDICES and ci is not None and ci < len(r):
-            v = num(r[ci])
-            if v:
-                out["IDX:" + name] = v
-    if not out:
-        raise NotPublished(url)
-    return out
+    rows = [[c.strip() for c in row] for row in csv.reader(io.StringIO(text)) if row]
+    return (rows[0], rows[1:]) if rows else ([], [])
 
 
 def parse_udiff(text):
     head, rows = clean_rows(text)
     hi = {h: i for i, h in enumerate(head)}
-    need = ["TckrSymb", "ClsPric"]
-    if any(n not in hi for n in need):
+    if "TckrSymb" not in hi or "ClsPric" not in hi:
         return None, None, None
     return head, hi, rows
 
 
+# ---------------------------------------------------------------- sources (one date each)
+
+def fetch_index(d):
+    """{index name: close}"""
+    url = f"https://nsearchives.nseindia.com/content/indices/ind_close_all_{d:%d%m%Y}.csv"
+    head, rows = clean_rows(http_get(url, "https://www.nseindia.com/").decode("utf-8", "replace"))
+    if not head or "Index Name" not in head[0] or "Closing Index Value" not in head:
+        raise NotPublished(url)
+    ci = head.index("Closing Index Value")
+    out = {}
+    for r in rows:
+        name = r[0].upper()
+        if name in INDICES and ci < len(r) and num(r[ci]):
+            out[name] = num(r[ci])
+    if not out:
+        raise NotPublished(url)
+    return out
+
+
 def fetch_nse(d):
-    """Returns {symbol: (close, name)} for NSE listed shares on day d."""
+    """{ticker: (close, company name)}"""
     url = ("https://nsearchives.nseindia.com/content/cm/"
            f"BhavCopy_NSE_CM_0_0_0_{d:%Y%m%d}_F_0000.csv.zip")
-    try:
-        raw = http_get(url, "https://www.nseindia.com/")
-        if raw[:2] != b"PK":
-            raise NotPublished(url)
-        z = zipfile.ZipFile(io.BytesIO(raw))
-        text = z.read(z.namelist()[0]).decode("utf-8", "replace")
-        head, hi, rows = parse_udiff(text)
-        if head is None:
-            raise NotPublished(url)
-        best = {}
-        for r in rows:
-            if len(r) < len(head):
-                continue
-            sym = r[hi["TckrSymb"]].upper()
-            ser = r[hi["SctySrs"]].upper() if "SctySrs" in hi else "EQ"
-            if ser not in NSE_SERIES_PREF:
-                continue
-            px = num(r[hi["ClsPric"]])
-            if not px:
-                continue
-            name = r[hi["FinInstrmNm"]] if "FinInstrmNm" in hi else sym
-            rank = NSE_SERIES_PREF.index(ser)
-            if sym not in best or rank < best[sym][2]:
-                best[sym] = (px, name, rank)
-        if best:
-            return {k: (v[0], v[1]) for k, v in best.items()}
+    raw = http_get(url, "https://www.nseindia.com/")
+    if raw[:2] != b"PK":
         raise NotPublished(url)
-    except NotPublished:
-        pass
-    # Fallback: legacy full bhavcopy (no company names)
-    url2 = ("https://nsearchives.nseindia.com/products/content/"
-            f"sec_bhavdata_full_{d:%d%m%Y}.csv")
-    raw = http_get(url2, "https://www.nseindia.com/")
-    head, rows = clean_rows(raw.decode("utf-8", "replace"))
-    hi = {h.upper(): i for i, h in enumerate(head)}
-    if "SYMBOL" not in hi or "CLOSE_PRICE" not in hi:
-        raise NotPublished(url2)
+    z = zipfile.ZipFile(io.BytesIO(raw))
+    head, hi, rows = parse_udiff(z.read(z.namelist()[0]).decode("utf-8", "replace"))
+    if head is None:
+        raise NotPublished(url)
     best = {}
     for r in rows:
-        sym = r[hi["SYMBOL"]].upper()
-        ser = r[hi["SERIES"]].upper()
-        if ser not in NSE_SERIES_PREF:
+        if len(r) < len(head):
             continue
-        px = num(r[hi["CLOSE_PRICE"]])
-        if not px:
+        ser = r[hi["SctySrs"]].upper() if "SctySrs" in hi else "EQ"
+        px = num(r[hi["ClsPric"]])
+        if ser not in NSE_SERIES_PREF or not px:
             continue
+        sym = r[hi["TckrSymb"]].upper()
+        name = r[hi["FinInstrmNm"]] if "FinInstrmNm" in hi else sym
         rank = NSE_SERIES_PREF.index(ser)
         if sym not in best or rank < best[sym][2]:
-            best[sym] = (px, sym, rank)
+            best[sym] = (px, name, rank)
     if not best:
-        raise NotPublished(url2)
+        raise NotPublished(url)
     return {k: (v[0], v[1]) for k, v in best.items()}
 
 
 def fetch_bse(d):
-    """Returns {scrip_code: (close, name, bse_symbol)} for BSE on day d."""
+    """{scrip code: (close, company name, BSE ticker)}"""
     url = ("https://www.bseindia.com/download/BhavCopy/Equity/"
            f"BhavCopy_BSE_CM_0_0_0_{d:%Y%m%d}_F_0000.CSV")
-    raw = http_get(url, "https://www.bseindia.com/")
-    head, hi, rows = parse_udiff(raw.decode("utf-8", "replace"))
+    head, hi, rows = parse_udiff(http_get(url, "https://www.bseindia.com/").decode("utf-8", "replace"))
     if head is None or "FinInstrmId" not in hi:
         raise NotPublished(url)
     out = {}
@@ -208,13 +179,27 @@ def fetch_bse(d):
             continue
         code = r[hi["FinInstrmId"]].strip()
         px = num(r[hi["ClsPric"]])
-        if not code or not px:
-            continue
-        name = r[hi["FinInstrmNm"]] if "FinInstrmNm" in hi else code
-        out[code] = (px, name, r[hi["TckrSymb"]].upper())
+        if code and px:
+            name = r[hi["FinInstrmNm"]] if "FinInstrmNm" in hi else code
+            out[code] = (px, name, r[hi["TckrSymb"]].upper())
     if not out:
         raise NotPublished(url)
     return out
+
+
+def latest_session(kind, fn, today):
+    """Newest date (today or up to LOOKBACK_DAYS back) whose file exists. Returns (date, data) or (None, None)."""
+    for back in range(LOOKBACK_DAYS + 1):
+        d = today - dt.timedelta(days=back)
+        try:
+            return d, fn(d)
+        except NotPublished:
+            continue
+        except FetchError as e:
+            log(f"{kind}: {e}")
+            return None, None
+    log(f"{kind}: no file found in the last {LOOKBACK_DAYS + 1} days")
+    return None, None
 
 
 # ---------------------------------------------------------------- helpers
@@ -227,41 +212,17 @@ def load_json(path, default):
         return default
 
 
-def parse_date(s):
-    return dt.date.fromisoformat(str(s)[:10])
-
-
-def daterange(a, b):
-    d = a
-    while d <= b:
-        yield d
-        d += dt.timedelta(days=1)
-
-
-def wanted_keys(portfolio):
-    """{key: earliest date needed}. Keys look like NSE:RELIANCE, BSE:500325, IDX:NIFTY 50"""
-    keys = {}
-    earliest = None
+def held_keys(portfolio):
+    """Keys like NSE:RELIANCE or BSE:544342 for every stock in any portfolio."""
+    keys = set()
     for p in portfolio.get("portfolios", []):
         for e in p.get("entries", []):
-            try:
-                d = parse_date(e["date"])
-            except (KeyError, ValueError):
-                continue
-            earliest = d if earliest is None or d < earliest else earliest
             if e.get("code") and e.get("exch") in ("NSE", "BSE"):
-                k = f'{e["exch"]}:{str(e["code"]).strip().upper()}'
-                if k not in keys or d < keys[k]:
-                    keys[k] = d
-    if earliest is not None:
-        start = earliest - dt.timedelta(days=10)
-        for name in INDICES:
-            keys["IDX:" + name] = start
+                keys.add(f'{e["exch"]}:{str(e["code"]).strip().upper()}')
     return keys
 
 
 def main():
-    probe = "--probe" in sys.argv
     now_ist = dt.datetime.now(IST)
     today = now_ist.date()
     log(f"Run at {now_ist:%Y-%m-%d %H:%M} IST")
@@ -269,178 +230,99 @@ def main():
     portfolio = load_json(PORTFOLIO_FILE, {"portfolios": []})
     prices = load_json(PRICES_FILE, {})
     before = json.dumps({k: v for k, v in prices.items() if k != "updated_ist"}, sort_keys=True)
-    prices.setdefault("series", {})
-    prices.setdefault("cov", {})
-    prices.setdefault("holidays", [])
-    holidays = set(prices["holidays"])
+    for old in ("cov", "holidays"):  # used by the old multi-day back-filling, no longer needed
+        prices.pop(old, None)
+    series = prices.setdefault("series", {})
+    latest = prices.setdefault("latest", {})
     symbols = load_json(SYMBOLS_FILE, {})
 
-    keys = wanted_keys(portfolio)
-    if probe and not keys:
-        keys = {"NSE:RELIANCE": today - dt.timedelta(days=10),
-                "BSE:500325": today - dt.timedelta(days=10)}
-        for name in INDICES:
-            keys["IDX:" + name] = today - dt.timedelta(days=10)
+    # One latest session per source, all three in parallel. A hard wall clock
+    # limit stops waiting even if a server sends data extremely slowly.
+    found = {}
 
-    cache = {}
+    def worker(kind, fn):
+        found[kind] = latest_session(kind, fn, today)
 
-    def get(kind, d):
-        ck = (kind, d)
-        if ck not in cache:
-            try:
-                fn = {"IDX": fetch_index_file, "NSE": fetch_nse, "BSE": fetch_bse}[kind]
-                cache[ck] = fn(d)
-            except (NotPublished, FetchError) as e:
-                cache[ck] = e
-        v = cache[ck]
-        if isinstance(v, Exception):
-            raise v
-        return v
+    threads = [threading.Thread(target=worker, args=a, daemon=True)
+               for a in (("IDX", fetch_index), ("NSE", fetch_nse), ("BSE", fetch_bse))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(max(0.0, BUDGET + 1.0 - (time.monotonic() - START)))
+    for kind in ("IDX", "NSE", "BSE"):
+        if kind not in found:
+            log(f"{kind}: stopped waiting, out of time")
+    d_idx, idx = found.get("IDX", (None, None))
+    d_nse, nse = found.get("NSE", (None, None))
+    d_bse, bse = found.get("BSE", (None, None))
 
-    # 1) latest trading day (index file published) -> refresh symbol list
-    latest = None
-    for back in range(0, 10):
-        d = today - dt.timedelta(days=back)
-        if d.isoformat() in holidays:
-            continue
-        try:
-            get("IDX", d)
-            latest = d
-            break
-        except NotPublished:
-            continue
-        except FetchError as e:
-            log("Index file fetch error:", e)
-            break
-    log("Latest trading day with published data:", latest)
-
-    if latest and symbols.get("asof") != latest.isoformat():
-        new_sym = {"asof": latest.isoformat()}
-        try:
-            nse = get("NSE", latest)
-            new_sym["NSE"] = sorted([s, v[1]] for s, v in nse.items())
-            log(f"NSE bhavcopy {latest}: {len(nse)} securities")
-        except Exception as e:
-            log("NSE symbol list failed:", e)
-        try:
-            bse = get("BSE", latest)
-            new_sym["BSE"] = sorted([c, v[2], v[1]] for c, v in bse.items())
-            log(f"BSE bhavcopy {latest}: {len(bse)} securities")
-        except Exception as e:
-            log("BSE symbol list failed:", e)
-        if "NSE" in new_sym or "BSE" in new_sym:
-            new_sym.setdefault("NSE", symbols.get("NSE", []))
-            new_sym.setdefault("BSE", symbols.get("BSE", []))
-            symbols = new_sym
-
-    # 2) fill missing days for every wanted key
-    def covered(k, d):
-        c = prices["cov"].get(k)
-        return bool(c) and c[0] <= d.isoformat() <= c[1]
-
-    need_days = {}
-    last_day = latest or (today - dt.timedelta(days=1))
-    for k, start in keys.items():
-        start = max(start, today - dt.timedelta(days=MAX_BACKFILL_DAYS))
-        for d in daterange(start, last_day):
-            if d.isoformat() in holidays or covered(k, d):
-                continue
-            need_days.setdefault(d, []).append(k)
-
-    log(f"Keys: {len(keys)}; days to fill: {len(need_days)}")
-    done = {k: set() for k in keys}
-    broken = set()
-    for d in sorted(need_days):
-        ks = need_days[d]
-        try:
-            idx = get("IDX", d)
-        except NotPublished:
-            if d < today:
-                holidays.add(d.isoformat())
-                for k in ks:
-                    done[k].add(d)
-            continue
-        except FetchError as e:
-            log("Stop: index fetch error", e)
-            break
-        for k in ks:
-            kind, code = k.split(":", 1)
-            if kind in broken:
-                continue
-            try:
-                if kind == "IDX":
-                    v = idx.get(k)
-                    name = code.title()
-                elif kind == "NSE":
-                    hit = get("NSE", d).get(code)
-                    v, name = (hit if hit else (None, None))
-                elif kind == "BSE":
-                    hit = get("BSE", d).get(code)
-                    v, name = ((hit[0], hit[1]) if hit else (None, None))
-                else:
-                    continue
-            except NotPublished as e:
-                log(f"{kind} file missing on trading day {d}: will retry later")
-                broken.add(kind)
-                continue
-            except FetchError as e:
-                log(f"{kind} fetch error on {d}: {e}")
-                broken.add(kind)
-                continue
-            s = prices["series"].setdefault(k, {"name": name or code, "px": {}})
-            if v:
-                s["px"][d.isoformat()] = round(v, 4)
-                if name and name != code:
-                    s["name"] = name
-            done[k].add(d)
-        time.sleep(0.25)
-
-    # 3) update coverage (contiguous from start date)
-    for k, start in keys.items():
-        start = max(start, today - dt.timedelta(days=MAX_BACKFILL_DAYS))
-        end = None
-        for d in daterange(start, last_day):
-            if d.isoformat() in holidays or covered(k, d) or d in done[k]:
-                end = d
-            else:
-                break
-        if end:
-            prices["cov"][k] = [start.isoformat(), end.isoformat()]
-
-    # tidy + sort
-    for k, s in prices["series"].items():
+    def add_point(key, name, d, close):
+        s = series.setdefault(key, {"name": name, "px": {}})
+        if name and name != key.split(":", 1)[1]:
+            s["name"] = name
+        s["px"][d.isoformat()] = round(close, 4)
         s["px"] = dict(sorted(s["px"].items()))
-    prices["holidays"] = sorted(holidays)
+
+    if idx:
+        log(f"Indices: session {d_idx}, {len(idx)} indices")
+        latest["IDX"] = {"date": d_idx.isoformat(), "close": idx}
+        for name, close in idx.items():
+            add_point("IDX:" + name, name.title(), d_idx, close)
+    if nse:
+        log(f"NSE bhavcopy: session {d_nse}, {len(nse)} securities")
+        latest["NSE"] = {"date": d_nse.isoformat(), "close": {s: round(v[0], 4) for s, v in sorted(nse.items())}}
+    if bse:
+        log(f"BSE bhavcopy: session {d_bse}, {len(bse)} securities")
+        latest["BSE"] = {
+            "date": d_bse.isoformat(),
+            "close": {c: round(v[0], 4) for c, v in sorted(bse.items())},
+            "symbol_close": {v[2]: round(v[0], 4) for c, v in sorted(bse.items())},
+        }
+
+    # Daily point for each held stock (builds history from today onwards)
+    for key in sorted(held_keys(portfolio)):
+        ex_, code = key.split(":", 1)
+        if ex_ == "NSE" and nse and code in nse:
+            add_point(key, nse[code][1], d_nse, nse[code][0])
+        elif ex_ == "BSE" and bse:
+            if code not in bse:  # a BSE ticker typed instead of the scrip code
+                code = next((c for c, v in bse.items() if v[2] == code), code)
+            if code in bse:
+                add_point(key, bse[code][1], d_bse, bse[code][0])
+            else:
+                log(f"{key}: not in the BSE file of {d_bse}")
+        elif ex_ == "NSE" and nse:
+            log(f"{key}: not in the NSE file of {d_nse}")
+
+    # Symbol list for code lookup in the website (from the same files, no extra download)
+    sym_date = max([d for d in (d_nse, d_bse) if d], default=None)
+    if sym_date and symbols.get("asof") != sym_date.isoformat():
+        symbols = {
+            "asof": sym_date.isoformat(),
+            "NSE": sorted([s, v[1]] for s, v in nse.items()) if nse else symbols.get("NSE", []),
+            "BSE": sorted([c, v[2], v[1]] for c, v in bse.items()) if bse else symbols.get("BSE", []),
+        }
+
+    dates = [x["date"] for x in latest.values() if isinstance(x, dict) and x.get("date")]
+    prices["last_trading_day"] = max(dates) if dates else prices.get("last_trading_day")
     prices["updated_ist"] = now_ist.strftime("%Y-%m-%d %H:%M")
-    all_days = [d for s in prices["series"].values() for d in s["px"]]
-    prices["last_trading_day"] = max(all_days) if all_days else None
     prices["sources"] = {
         "NSE": "NSE UDiFF equity bhavcopy (nsearchives.nseindia.com)",
         "BSE": "BSE UDiFF equity bhavcopy (bseindia.com)",
         "IDX": "NSE index closing values (ind_close_all)",
     }
 
-    if probe:
-        for k in sorted(prices["series"]):
-            px = prices["series"][k]["px"]
-            log(k, prices["series"][k]["name"], list(px.items())[-3:])
-        log("holidays:", prices["holidays"][-5:])
-        log("symbols asof", symbols.get("asof"), "NSE", len(symbols.get("NSE", [])),
-            "BSE", len(symbols.get("BSE", [])))
-        return
-
     os.makedirs(DATA, exist_ok=True)
     after = json.dumps({k: v for k, v in prices.items() if k != "updated_ist"}, sort_keys=True)
     if after != before or not os.path.exists(PRICES_FILE):
         with open(PRICES_FILE, "w", encoding="utf-8") as f:
             json.dump(prices, f, separators=(",", ":"))
+        log("Saved", PRICES_FILE)
     else:
         log("No new prices")
     with open(SYMBOLS_FILE, "w", encoding="utf-8") as f:
         json.dump(symbols, f, separators=(",", ":"))
-    log("Saved", PRICES_FILE, "and", SYMBOLS_FILE)
-    if broken:
-        log("Some sources were not available this run:", ", ".join(sorted(broken)))
+    log(f"Finished in {time.monotonic() - START:.1f} s")
 
 
 if __name__ == "__main__":

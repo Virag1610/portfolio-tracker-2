@@ -21,7 +21,9 @@ A dark, dashboard-style website for tracking model portfolios of NSE/BSE stocks 
 | BSE closing prices | BSE daily equity bhavcopy (`bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_...CSV`) |
 | Nifty Microcap 250 and other indices | NSE daily index closing file (`nsearchives.nseindia.com/content/indices/ind_close_all_DDMMYYYY.csv`) |
 
-The job runs at about **5:00 PM IST** on weekdays, then again at 7:00 PM and 10:00 PM in case the exchange publishes its files late, plus a 9:00 AM catch-up the next morning. It only downloads prices for stocks you actually hold, so any company, nano cap or large cap, works.
+The job runs at about **5:00 PM IST** on weekdays, then again at 7:00 PM and 10:00 PM in case the exchange publishes its files late, plus a 9:00 AM catch-up the next morning.
+
+Each run downloads **only the latest trading session** (one NSE file, one BSE file, one index file), never a range of past days. Every request has a 10-second timeout and the whole run finishes in under 15 seconds. It stores the latest close of **every** NSE and BSE listed share (BSE by scrip code such as `544342` and by ticker), so any company, nano cap or large cap, is valued straight away. A daily price point is also added for the stocks you hold and for the indices, so the chart history builds up from the day you start.
 
 The benchmark is the **price index** (as published in NSE's daily file), so index dividends are not included.
 
@@ -43,8 +45,11 @@ All of these can be changed in **Settings & data**.
 
 ## How the numbers are calculated
 
-- **XIRR**: every "add money" is a cash flow out of your pocket on its date, every "withdraw" is a cash flow back, and today's portfolio value is the final cash flow. The yearly rate that makes these balance is the XIRR (365-day year, same as Excel). The *Money in / out & XIRR* page shows every cash flow and proves the sum is zero at that rate. Checked against Microsoft's own XIRR example (37.34%) and your example (₹1,00,000 start, ₹20,000 added on day 172, ₹2,00,000 after one year gives 73.26%).
-- **Benchmark XIRR**: the same money on the same dates put into the benchmark index.
+- **XIRR (headline)**: each buy is money paid on its date (including slippage and charges), each sale and dividend is money received, and the final cash flow is the market value of the shares still held (shares x latest official close), dated today. No daily price history is needed.
+- **Fund XIRR**: every "add money" is paid in on its date, every "withdraw" comes back, and the final cash flow is today's total value (shares at the latest close plus idle cash). This shows the effect of keeping cash uninvested.
+- Both use the yearly rate that makes the cash flows balance (365-day year, same as Excel). The *Money in / out & XIRR* page lists every cash flow and proves the sum is zero at that rate. Checked against Microsoft's own XIRR example (37.34%) and your example (₹1,00,000 start, ₹20,000 added on day 172, ₹2,00,000 after one year gives 73.26%).
+- **Benchmark XIRR**: the same cash flows on the same dates put into the benchmark index at its official close. It needs the index value on those dates, so it shows "–" for any date before the stored index history.
+- **Chart**: where daily closing prices are not stored (for example a stock bought before the tracker started), the stock's value is drawn as a straight line between your trade price and the latest official close. The chart says so when this estimate is used.
 - **Time-weighted return** (the chart line): like a mutual fund NAV, so adding or withdrawing money does not move the line; only performance does.
 - **Profit on sales and holding period**: first in, first out (as used for Indian tax). Buy cost includes slippage and charges.
 - **Cash check**: a buy is refused if the portfolio does not have enough cash on that date, and a sale is refused if you do not hold enough shares.
