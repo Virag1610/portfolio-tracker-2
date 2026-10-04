@@ -30,9 +30,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Check one stock's history against official closes
-        if: ${{ github.event.inputs.check != '' && github.event.inputs.check != null }}
-        run: python scripts/update_prices.py --check "${{ github.event.inputs.check }}"
       - name: Download official closing prices
         run: python scripts/update_prices.py
       - name: Save to repository
@@ -47,3 +44,7 @@ jobs:
             sleep $((i * 5))
           done
           exit 1
+      - name: Check one stock's history against official closes (optional, saves nothing)
+        if: ${{ always() && github.event.inputs.check != '' && github.event.inputs.check != null }}
+        continue-on-error: true
+        run: python scripts/update_prices.py --check "${{ github.event.inputs.check }}"

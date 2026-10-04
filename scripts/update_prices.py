@@ -224,15 +224,51 @@ def latest_session(kind, fn, today):
 
 # ---------------------------------------------------------------- history back-fill (Yahoo Finance)
 
-def yahoo_symbol(key, bse_codes_by_symbol):
+def same_company(a, b):
+    """First word of two company names agree (guards the NSE fallback against a different company)."""
+    wa = "".join(ch for ch in (a or "").upper().split(" ")[0] if ch.isalpha())
+    wb = "".join(ch for ch in (b or "").upper().split(" ")[0] if ch.isalpha())
+    return len(wa) >= 3 and wa[:4] == wb[:4]
+
+
+def yahoo_symbols(key, bse_rows, nse_rows=()):
+    """Yahoo names to try, best first. BSE shares are listed on Yahoo either by scrip code
+    (500325.BO) or by ticker (STALLION.BO); the NSE ticker is a last resort for a BSE holding."""
     ex, code = key.split(":", 1)
     if ex == "NSE":
-        return code + ".NS"
-    if ex == "BSE":
-        if not code.isdigit():
-            code = bse_codes_by_symbol.get(code, "")
-        return code + ".BO" if code else None
-    return None
+        return [code + ".NS"]
+    if ex != "BSE":
+        return []
+    by_code = {r[0]: r[1] for r in bse_rows}
+    names = {r[0]: r[2] for r in bse_rows if len(r) > 2}
+    nse_names = dict(nse_rows)
+    by_sym = {r[1]: r[0] for r in bse_rows}
+    if not code.isdigit():
+        code = by_sym.get(code, "")
+    out = []
+    if code:
+        out.append(code + ".BO")
+    ticker = by_code.get(code) or (key.split(":", 1)[1] if not key.split(":", 1)[1].isdigit() else "")
+    if ticker:
+        out.append(ticker + ".BO")
+        if ticker in nse_names and same_company(names.get(code), nse_names[ticker]):
+            out.append(ticker + ".NS")
+    return out
+
+
+def fetch_yahoo_any(candidates, start, end):
+    """Try each Yahoo name until one has data. Returns (name used, closes, splits)."""
+    last = None
+    for ysym in candidates:
+        try:
+            hist, splits = fetch_yahoo_history(ysym, start, end)
+            if hist:
+                return ysym, hist, splits
+            last = NotPublished(f"{ysym}: no prices in range")
+        except (NotPublished, FetchError) as e:
+            last = e
+            log(f"  Yahoo {ysym}: {'not found' if isinstance(e, NotPublished) else e}")
+    raise last or NotPublished("no Yahoo symbol to try")
 
 
 def fetch_yahoo_history(ysym, start, end):
@@ -314,12 +350,16 @@ def check(key):
     official = dict((prices.get("series", {}).get(key) or {}).get("px", {}))
     for d in (prices.get("series", {}).get(key) or {}).get("yahoo_dates", []):
         official.pop(d, None)
-    ysym = yahoo_symbol(key, {r[1]: r[0] for r in symbols.get("BSE", [])})
+    cands = yahoo_symbols(key, symbols.get("BSE", []), symbols.get("NSE", []))
     today = dt.datetime.now(IST).date()
     start = dt.date.fromisoformat(min(official)) - dt.timedelta(days=30) if official else today - dt.timedelta(days=60)
-    log(f"Check {key} as {ysym}: Yahoo history {start} to {today}")
-    hist, splits = fetch_yahoo_history(ysym, start, today)
-    log(f"Yahoo returned {len(hist)} daily closes; splits/bonuses in range: {splits or 'none'}")
+    log(f"Check {key}: trying Yahoo {', '.join(cands)} for {start} to {today}")
+    try:
+        ysym, hist, splits = fetch_yahoo_any(cands, start, today)
+    except (NotPublished, FetchError) as e:
+        log(f"No Yahoo history found: {e}")
+        return
+    log(f"Yahoo {ysym} returned {len(hist)} daily closes; splits/bonuses in range: {splits or 'none'}")
     log(f"{'date':<12}{'official':>12}{'yahoo':>12}{'diff %':>9}")
     for d in sorted(set(official) | set(hist)):
         o, y = official.get(d), hist.get(d)
@@ -345,21 +385,22 @@ def main():
     held = held_keys(portfolio)
 
     # Stocks whose stored history does not reach back to their earliest trade
-    bse_by_sym = {r[1]: r[0] for r in symbols.get("BSE", [])}
+    bse_rows, nse_rows = symbols.get("BSE", []), symbols.get("NSE", [])
     need_hist = {k: d for k, d in sorted(held.items())
                  if (series.get(k) or {}).get("hist_from", "9999") > d.isoformat()
-                 and yahoo_symbol(k, bse_by_sym)}
+                 and yahoo_symbols(k, bse_rows, nse_rows)}
     if len(need_hist) > MAX_YAHOO:
         log(f"{len(need_hist)} stocks need history; doing {MAX_YAHOO} now, the rest next run")
         need_hist = dict(list(need_hist.items())[:MAX_YAHOO])
     hist_found = {}
 
     def hist_worker(key, start):
-        ysym = yahoo_symbol(key, bse_by_sym)
+        cands = yahoo_symbols(key, bse_rows, nse_rows)
         try:
-            hist_found[key] = (ysym, fetch_yahoo_history(ysym, start, today - dt.timedelta(days=1))[0])
+            ysym, hist, _ = fetch_yahoo_any(cands, start, today - dt.timedelta(days=1))
+            hist_found[key] = (ysym, hist)
         except (NotPublished, FetchError) as e:
-            hist_found[key] = (ysym, e)
+            hist_found[key] = ("/".join(cands), e)
 
     # One latest session per source, all three in parallel. A hard wall clock
     # limit stops waiting even if a server sends data extremely slowly.
