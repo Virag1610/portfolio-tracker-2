@@ -368,6 +368,24 @@ def check(key):
     med, n = compare_with_official(hist, official)
     log(f"Dates in both: {n}; median difference: {med * 100:.3f}%" if n else "No dates in both to compare")
 
+    # Spot check: Yahoo-filled dates against the official exchange file of that exact day
+    filled = sorted((prices.get("series", {}).get(key) or {}).get("yahoo_dates", []))
+    if filled:
+        stored = prices["series"][key]["px"]
+        picks = sorted({filled[0], filled[len(filled) // 4], filled[len(filled) // 2], filled[-1]})
+        ex, code = key.split(":", 1)
+        if ex == "BSE" and not code.isdigit():
+            code = {r[1]: r[0] for r in symbols.get("BSE", [])}.get(code, code)
+        log(f"Spot check of {len(picks)} Yahoo-filled dates against the official {ex} file of that day:")
+        for d in picks:
+            try:
+                day = fetch_bse(dt.date.fromisoformat(d)) if ex == "BSE" else fetch_nse(dt.date.fromisoformat(d))
+                o = day.get(code, (None,))[0]
+                diff = f"{(stored[d] / o - 1) * 100:+.2f}%" if o else "not traded that day"
+                log(f"  {d}: stored {stored[d]}  official {o}  {diff}")
+            except (NotPublished, FetchError) as e:
+                log(f"  {d}: official file not available ({e})")
+
 
 def main():
     now_ist = dt.datetime.now(IST)
