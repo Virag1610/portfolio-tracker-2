@@ -1102,7 +1102,7 @@ function renderHoldings() {
   const p = curPf(); const t = $("#holdTbl");
   if (!p) { t.innerHTML = `<tbody><tr><td class="l">Create a portfolio first.</td></tr></tbody>`; return; }
   const r = results[p.id];
-  $("#holdSub").innerHTML = `Stocks currently held in <b>${esc(p.name)}</b>, valued at the official closing price of ${fdate(r.asOf)}. Average cost includes slippage and charges.`;
+  $("#holdSub").innerHTML = `Stocks currently held in <b>${esc(p.name)}</b>, valued at the latest official closing price (${fdate(book.lastDay)} session). Average cost includes slippage and charges.`;
   if (!r.holdings.length) { t.innerHTML = `<tbody><tr><td class="l dim">No stocks held right now.</td></tr></tbody>`; return; }
   const cols = [
     ["name", "Security", "l"], ["qty", "Qty"], ["avg", "Avg cost"], ["cost", "Invested"], ["last", "Last close"], ["dayChg", "Day %"],
