@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791106801220,
- "seq": 4,
+ "updatedAt": 1791106837476,
+ "seq": 5,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -45,7 +45,16 @@
  },
  "portfolios": [
   {
-   "entries": [],
+   "entries": [
+    {
+     "type": "DEPOSIT",
+     "date": "2024-10-04",
+     "note": "",
+     "amount": 1000000,
+     "id": "d9j0yrlorkrj",
+     "seq": 4
+    }
+   ],
    "benchmark": "NIFTY MICROCAP 250",
    "id": "21km1qf3a7hg",
    "name": "Virag + Dad",
