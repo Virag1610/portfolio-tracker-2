@@ -25,6 +25,8 @@ The job runs at about **5:00 PM IST** on weekdays, then again at 7:00 PM and 10:
 
 Each run downloads **only the latest trading session** (one NSE file, one BSE file, one index file), never a range of past days. Every request has a 10-second timeout and the whole run finishes in under 15 seconds. It stores the latest close of **every** NSE and BSE listed share (BSE by scrip code such as `544342` and by ticker), so any company, nano cap or large cap, is valued straight away. A daily price point is also added for the stocks you hold and for the indices, so the chart history builds up from the day you start.
 
+**Older history for a stock (one-time back-fill):** when you record a trade dated before the stored price history, the next run makes ONE request to Yahoo Finance's daily price history for that stock (`SYMBOL.NS` for NSE, `scripcode.BO` for BSE, e.g. `544342.BO`) and fills every missing day from your earliest trade date. Yahoo is not an official exchange source, so: official NSE/BSE closes are never overwritten; Yahoo's prices are first compared with the official closes already stored and are rejected if they differ by more than 1%; Yahoo's split- and bonus-adjusted prices are converted back to the actual traded prices; and each filled date is listed in `prices.json` (`yahoo_dates`). Once a stock is filled it is never fetched again. To compare Yahoo with the official closes for any stock yourself: **Actions → Update prices → Run workflow**, and type e.g. `BSE:544342` in the "check" box.
+
 The benchmark is the **price index** (as published in NSE's daily file), so index dividends are not included.
 
 ## Costs used (equity delivery)

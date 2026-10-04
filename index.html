@@ -465,7 +465,7 @@ class PriceBook {
     const ser = (prices && prices.series) || {};
     for (const k in ser) {
       const entries = Object.entries(ser[k].px || {}).sort((a, b) => (a[0] < b[0] ? -1 : 1));
-      this.s[k] = { name: ser[k].name, d: entries.map(e => e[0]), v: entries.map(e => e[1]) };
+      this.s[k] = { name: ser[k].name, d: entries.map(e => e[0]), v: entries.map(e => e[1]), yahoo: new Set(ser[k].yahoo_dates || []) };
     }
     this.latest = (prices && prices.latest) || {};
     this.lastDay = prices && prices.last_trading_day || null;
@@ -499,6 +499,7 @@ class PriceBook {
   prev(k, date) { const i = this.idx(k, date); const s = this.s[k]; if (i < 0) return null; const j = s.d[i] === date ? i - 1 : i; return j >= 0 ? { px: s.v[j], date: s.d[j] } : null; }
   dates(k) { this._ensure(k); return this.s[k] ? this.s[k].d : []; }
   name(k) { return this.s[k] && this.s[k].name; }
+  fromYahoo(k, date) { return !!(this.s[k] && this.s[k].yahoo && this.s[k].yahoo.has(date)); }
 }
 
 function keyOf(e) { return `${e.exch}:${String(e.code).trim().toUpperCase()}`; }
@@ -645,7 +646,7 @@ function computePortfolio(p, book, settings, symNames) {
    *  (official closes and your own trade prices). */
   function pxOn(k, d) {
     const ex = book.exact(k, d);
-    if (ex != null) return ex;
+    if (ex != null) { if (book.fromYahoo(k, d)) res.usesYahoo = true; return ex; }
     const pc = book.close(k, d);
     if (pc && book.lastDay && d >= book.lastDay) return pc.px;
     let prev = pc ? [pc.date, pc.px] : null, next = book.next(k, d);
@@ -1036,7 +1037,8 @@ const pctFmt = v => (v > 0 ? "+" : "") + v.toFixed(2) + "%";
 const inrFmt = v => inrShort(v);
 
 /* ---------- dashboard ---------- */
-const estNote = r => (r.estimated ? " Where daily closing prices are not stored, stock values are straight lines between your trade prices and the latest official close (estimate)." : "");
+const estNote = r => (r.usesYahoo ? " Daily prices from before official collection started come from Yahoo Finance, checked against official NSE/BSE closes." : "")
+  + (r.estimated ? " Where daily closing prices are not stored, stock values are straight lines between your trade prices and the latest official close (estimate)." : "");
 function renderDashboard() {
   const p = curPf();
   if (!p || !results[p.id].firstDate) {

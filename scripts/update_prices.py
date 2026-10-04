@@ -18,8 +18,24 @@ Writes:
                                added per run (history builds up going forward)
   * data/symbols.json  list of all NSE/BSE codes and names (for lookup in the site)
 
-Every network request has timeout=10 and the whole run stops looking for files
-after a fixed time budget, so it finishes in under 15 seconds.
+History back-fill (only when needed): if a held stock has trades older than
+its stored price history, ONE request to Yahoo Finance's daily chart endpoint
+(symbol.NS for NSE, scrip code.BO for BSE) fills the missing dates from the
+earliest trade date. Yahoo is not an official exchange source, so:
+  * official NSE/BSE closes are never overwritten,
+  * Yahoo prices are checked against the official closes stored for the same
+    dates and rejected if they differ by more than 1% (median),
+  * Yahoo's split-adjusted closes are converted back to the actual traded
+    prices (as in the exchange files), so quantities and trade prices match,
+  * filled dates are listed in series[key]["yahoo_dates"].
+Once filled, a stock is marked (series[key]["hist_from"]) and never re-fetched.
+
+Every network request has timeout=10 and the whole run stops waiting after a
+fixed time budget, so a daily run finishes in under 15 seconds.
+
+Check mode (no saving):  python scripts/update_prices.py --check BSE:544342
+fetches Yahoo's history for one stock and compares it day by day with the
+official closes already stored.
 Only the Python standard library is used, so nothing needs installing.
 """
 
@@ -28,8 +44,10 @@ import datetime as dt
 import io
 import json
 import os
+import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 import threading
@@ -57,6 +75,8 @@ NSE_SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST", "SZ", "RR", "IV"]
 TIMEOUT = 10          # seconds, every request
 BUDGET = 12.0         # seconds spent looking for files, all sources in parallel
 LOOKBACK_DAYS = 6     # how far back to look for the most recent session (weekends, holidays)
+MAX_YAHOO = 6         # at most this many stocks back-filled per run (the rest on the next run)
+YAHOO_MAX_DIFF = 0.01 # reject Yahoo history if it differs from official closes by more than 1% (median)
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 START = time.monotonic()
 
@@ -202,6 +222,65 @@ def latest_session(kind, fn, today):
     return None, None
 
 
+# ---------------------------------------------------------------- history back-fill (Yahoo Finance)
+
+def yahoo_symbol(key, bse_codes_by_symbol):
+    ex, code = key.split(":", 1)
+    if ex == "NSE":
+        return code + ".NS"
+    if ex == "BSE":
+        if not code.isdigit():
+            code = bse_codes_by_symbol.get(code, "")
+        return code + ".BO" if code else None
+    return None
+
+
+def fetch_yahoo_history(ysym, start, end):
+    """Daily closes from start to end (inclusive) in ONE request: {iso date: actual traded close}."""
+    p1 = int(dt.datetime.combine(start, dt.time(), IST).timestamp())
+    p2 = int(dt.datetime.combine(end + dt.timedelta(days=1), dt.time(), IST).timestamp())
+    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ysym)}"
+           f"?period1={p1}&period2={p2}&interval=1d&events=split")
+    raw = http_get(url, "https://finance.yahoo.com/")
+    try:
+        res = json.loads(raw)["chart"]["result"][0]
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise FetchError(f"unexpected Yahoo reply for {ysym}")
+    stamps = res.get("timestamp") or []
+    closes = ((res.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    # Yahoo's close is adjusted for later splits/bonuses; undo that to get the traded price
+    splits = []
+    for ev in ((res.get("events") or {}).get("splits") or {}).values():
+        try:
+            when = dt.datetime.fromtimestamp(int(ev["date"]), IST).date()
+            ratio = float(ev["numerator"]) / float(ev["denominator"])
+            if ratio > 0:
+                splits.append((when, ratio))
+        except (KeyError, ValueError, TypeError, ZeroDivisionError):
+            continue
+    out = {}
+    for t, c in zip(stamps, closes):
+        if c is None or c <= 0:
+            continue
+        d = dt.datetime.fromtimestamp(int(t), IST).date()
+        if d < start or d > end:
+            continue
+        factor = 1.0
+        for when, ratio in splits:
+            if when > d:
+                factor *= ratio
+        out[d.isoformat()] = round(c * factor, 4)
+    return out, splits
+
+
+def compare_with_official(yahoo, official):
+    """Median relative difference on dates present in both, and the number of such dates."""
+    diffs = sorted(abs(yahoo[d] / official[d] - 1) for d in official if d in yahoo and official[d])
+    if not diffs:
+        return None, 0
+    return diffs[len(diffs) // 2], len(diffs)
+
+
 # ---------------------------------------------------------------- helpers
 
 def load_json(path, default):
@@ -213,13 +292,41 @@ def load_json(path, default):
 
 
 def held_keys(portfolio):
-    """Keys like NSE:RELIANCE or BSE:544342 for every stock in any portfolio."""
-    keys = set()
+    """{key: earliest trade date} for every stock in any portfolio. Keys look like NSE:RELIANCE or BSE:544342."""
+    keys = {}
     for p in portfolio.get("portfolios", []):
         for e in p.get("entries", []):
             if e.get("code") and e.get("exch") in ("NSE", "BSE"):
-                keys.add(f'{e["exch"]}:{str(e["code"]).strip().upper()}')
+                k = f'{e["exch"]}:{str(e["code"]).strip().upper()}'
+                try:
+                    d = dt.date.fromisoformat(str(e["date"])[:10])
+                except (KeyError, ValueError):
+                    continue
+                if k not in keys or d < keys[k]:
+                    keys[k] = d
     return keys
+
+
+def check(key):
+    """Compare Yahoo's history for one stock with the official closes stored in prices.json (no saving)."""
+    prices = load_json(PRICES_FILE, {})
+    symbols = load_json(SYMBOLS_FILE, {})
+    official = dict((prices.get("series", {}).get(key) or {}).get("px", {}))
+    for d in (prices.get("series", {}).get(key) or {}).get("yahoo_dates", []):
+        official.pop(d, None)
+    ysym = yahoo_symbol(key, {r[1]: r[0] for r in symbols.get("BSE", [])})
+    today = dt.datetime.now(IST).date()
+    start = dt.date.fromisoformat(min(official)) - dt.timedelta(days=30) if official else today - dt.timedelta(days=60)
+    log(f"Check {key} as {ysym}: Yahoo history {start} to {today}")
+    hist, splits = fetch_yahoo_history(ysym, start, today)
+    log(f"Yahoo returned {len(hist)} daily closes; splits/bonuses in range: {splits or 'none'}")
+    log(f"{'date':<12}{'official':>12}{'yahoo':>12}{'diff %':>9}")
+    for d in sorted(set(official) | set(hist)):
+        o, y = official.get(d), hist.get(d)
+        diff = f"{(y / o - 1) * 100:+.2f}" if o and y else ""
+        log(f"{d:<12}{o if o else '-':>12}{y if y else '-':>12}{diff:>9}")
+    med, n = compare_with_official(hist, official)
+    log(f"Dates in both: {n}; median difference: {med * 100:.3f}%" if n else "No dates in both to compare")
 
 
 def main():
@@ -235,6 +342,24 @@ def main():
     series = prices.setdefault("series", {})
     latest = prices.setdefault("latest", {})
     symbols = load_json(SYMBOLS_FILE, {})
+    held = held_keys(portfolio)
+
+    # Stocks whose stored history does not reach back to their earliest trade
+    bse_by_sym = {r[1]: r[0] for r in symbols.get("BSE", [])}
+    need_hist = {k: d for k, d in sorted(held.items())
+                 if (series.get(k) or {}).get("hist_from", "9999") > d.isoformat()
+                 and yahoo_symbol(k, bse_by_sym)}
+    if len(need_hist) > MAX_YAHOO:
+        log(f"{len(need_hist)} stocks need history; doing {MAX_YAHOO} now, the rest next run")
+        need_hist = dict(list(need_hist.items())[:MAX_YAHOO])
+    hist_found = {}
+
+    def hist_worker(key, start):
+        ysym = yahoo_symbol(key, bse_by_sym)
+        try:
+            hist_found[key] = (ysym, fetch_yahoo_history(ysym, start, today - dt.timedelta(days=1))[0])
+        except (NotPublished, FetchError) as e:
+            hist_found[key] = (ysym, e)
 
     # One latest session per source, all three in parallel. A hard wall clock
     # limit stops waiting even if a server sends data extremely slowly.
@@ -245,6 +370,7 @@ def main():
 
     threads = [threading.Thread(target=worker, args=a, daemon=True)
                for a in (("IDX", fetch_index), ("NSE", fetch_nse), ("BSE", fetch_bse))]
+    threads += [threading.Thread(target=hist_worker, args=(k, d), daemon=True) for k, d in need_hist.items()]
     for t in threads:
         t.start()
     for t in threads:
@@ -262,6 +388,8 @@ def main():
             s["name"] = name
         s["px"][d.isoformat()] = round(close, 4)
         s["px"] = dict(sorted(s["px"].items()))
+        if d.isoformat() in s.get("yahoo_dates", []):  # an official close replaces a Yahoo one
+            s["yahoo_dates"].remove(d.isoformat())
 
     if idx:
         log(f"Indices: session {d_idx}, {len(idx)} indices")
@@ -280,7 +408,7 @@ def main():
         }
 
     # Daily point for each held stock (builds history from today onwards)
-    for key in sorted(held_keys(portfolio)):
+    for key in sorted(held):
         ex_, code = key.split(":", 1)
         if ex_ == "NSE" and nse and code in nse:
             add_point(key, nse[code][1], d_nse, nse[code][0])
@@ -293,6 +421,31 @@ def main():
                 log(f"{key}: not in the BSE file of {d_bse}")
         elif ex_ == "NSE" and nse:
             log(f"{key}: not in the NSE file of {d_nse}")
+
+    # History back-fill: only dates without an official close, only if it agrees with official closes
+    for key, start in need_hist.items():
+        if key not in hist_found:
+            log(f"{key}: history request ran out of time, will retry next run")
+            continue
+        ysym, hist = hist_found[key]
+        if isinstance(hist, Exception):
+            log(f"{key}: history from Yahoo ({ysym}) failed: {hist}. Will retry next run")
+            continue
+        s = series.setdefault(key, {"name": key.split(":", 1)[1], "px": {}})
+        filled = set(s.get("yahoo_dates", []))
+        official = {d: v for d, v in s["px"].items() if d not in filled}
+        med, n = compare_with_official(hist, official)
+        if n and med > YAHOO_MAX_DIFF:
+            log(f"{key}: Yahoo ({ysym}) differs from official closes by {med * 100:.2f}% (median of {n} days). Not used")
+            continue
+        new = {d: v for d, v in hist.items() if d not in official}
+        s["px"].update(new)
+        s["px"] = dict(sorted(s["px"].items()))
+        s["yahoo_dates"] = sorted(filled | set(new))
+        s["hist_from"] = start.isoformat()
+        s["hist_source"] = f"Yahoo Finance {ysym} (dates without an official NSE/BSE close)"
+        check_txt = f"matches official closes within {med * 100:.3f}% (median of {n} days)" if n else "no official closes to compare yet"
+        log(f"{key}: filled {len(new)} daily closes from {start} via Yahoo {ysym}; {check_txt}")
 
     # Symbol list for code lookup in the website (from the same files, no extra download)
     sym_date = max([d for d in (d_nse, d_bse) if d], default=None)
@@ -326,4 +479,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 3 and sys.argv[1] == "--check":
+        check(sys.argv[2].upper())
+    else:
+        main()
