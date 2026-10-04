@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791106837476,
- "seq": 5,
+ "updatedAt": 1791106878531,
+ "seq": 6,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -53,6 +53,18 @@
      "amount": 1000000,
      "id": "d9j0yrlorkrj",
      "seq": 4
+    },
+    {
+     "type": "BUY",
+     "date": "2026-10-04",
+     "note": "",
+     "exch": "BSE",
+     "code": "539997",
+     "qty": 100,
+     "price": 1080,
+     "tier": "micro",
+     "id": "cbesknrrsgg0",
+     "seq": 5
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
