@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791011366978,
+ "updatedAt": 1791106529423,
  "seq": 4,
  "settings": {
   "charges": {
@@ -45,28 +45,7 @@
  },
  "portfolios": [
   {
-   "entries": [
-    {
-     "type": "DEPOSIT",
-     "date": "2026-09-01",
-     "note": "for stallion",
-     "amount": 105000,
-     "id": "jv83g5pnd8in",
-     "seq": 2
-    },
-    {
-     "type": "BUY",
-     "date": "2026-09-03",
-     "note": "",
-     "exch": "BSE",
-     "code": "544342",
-     "qty": 500,
-     "price": 201,
-     "tier": "micro",
-     "id": "v8fr3w1xdkrz",
-     "seq": 3
-    }
-   ],
+   "entries": [],
    "benchmark": "NIFTY MICROCAP 250",
    "id": "21km1qf3a7hg",
    "name": "microcap",
