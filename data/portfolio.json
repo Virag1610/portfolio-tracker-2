@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791106878531,
+ "updatedAt": 1791106916326,
  "seq": 6,
  "settings": {
   "charges": {
@@ -56,7 +56,7 @@
     },
     {
      "type": "BUY",
-     "date": "2026-10-04",
+     "date": "2025-03-27",
      "note": "",
      "exch": "BSE",
      "code": "539997",
