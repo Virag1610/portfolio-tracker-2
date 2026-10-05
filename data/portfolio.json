@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791227131309,
+ "updatedAt": 1791227147116,
  "seq": 10,
  "settings": {
   "charges": {
@@ -92,7 +92,7 @@
     },
     {
      "type": "SELL",
-     "date": "2026-10-06",
+     "date": "2026-05-06",
      "note": "",
      "exch": "NSE",
      "code": "AEROFLEX",
