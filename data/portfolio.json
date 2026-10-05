@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791227339875,
- "seq": 12,
+ "updatedAt": 1791227388092,
+ "seq": 13,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -125,6 +125,18 @@
      "tier": "small",
      "id": "mkay9cswid0h",
      "seq": 11
+    },
+    {
+     "type": "SELL",
+     "date": "2026-10-06",
+     "note": "",
+     "exch": "NSE",
+     "code": "DIFFNKG",
+     "qty": 200,
+     "price": 359,
+     "tier": "large",
+     "id": "dw7gsdgvje7r",
+     "seq": 12
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
