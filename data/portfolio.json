@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791227413157,
+ "updatedAt": 1791227437237,
  "seq": 14,
  "settings": {
   "charges": {
@@ -128,7 +128,7 @@
     },
     {
      "type": "SELL",
-     "date": "2026-10-06",
+     "date": "2026-08-20",
      "note": "",
      "exch": "NSE",
      "code": "DIFFNKG",
