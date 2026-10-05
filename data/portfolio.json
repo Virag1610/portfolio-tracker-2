@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791227721868,
+ "updatedAt": 1791228712574,
  "seq": 18,
  "settings": {
   "charges": {
@@ -61,7 +61,7 @@
      "exch": "BSE",
      "code": "539997",
      "qty": 100,
-     "price": 1080,
+     "price": 1155,
      "tier": "micro",
      "id": "cbesknrrsgg0",
      "seq": 5
