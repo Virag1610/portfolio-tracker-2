@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791227147116,
- "seq": 10,
+ "updatedAt": 1791227170871,
+ "seq": 11,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -101,6 +101,18 @@
      "tier": "small",
      "id": "r7fh5itdcaxa",
      "seq": 9
+    },
+    {
+     "type": "SELL",
+     "date": "2026-05-06",
+     "note": "",
+     "exch": "NSE",
+     "code": "AEROFLEX",
+     "qty": 100,
+     "price": 435,
+     "tier": "small",
+     "id": "pzg29sn4eqlw",
+     "seq": 10
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
