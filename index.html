@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // Apply the saved theme before anything is painted (no flash of the wrong theme)
+  (function () {
+    var t = "dark";
+    try { t = localStorage.getItem("folio_theme") === "light" ? "light" : "dark"; } catch (e) {}
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
 <title>Folio Lab</title>
 <meta name="description" content="Personal model portfolio tracker for NSE/BSE with XIRR and benchmark comparison">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10,45 +18,112 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-:root {
+:root, :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0d10;
-  --surface: #12151a;
-  --surface-2: #181c23;
-  --surface-3: #1f242c;
-  --border: #252b35;
-  --border-2: #313844;
-  --text: #e8eaed;
-  --text-2: #a7aebb;
-  --muted: #6f7886;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #1c2128;
+  --surface-3: #262c36;
+  --border: #30363d;
+  --border-2: #3d444d;
+  --border-hover: #4d5562;
+  --text: #c9d1d9;
+  --text-strong: #f0f6fc;
+  --text-2: #9198a1;
+  --muted: #6e7681;
   --accent: #3987e5;
-  --accent-soft: rgba(57,135,229,.14);
-  --good: #2bb24c;
-  --bad: #e66767;
-  --warn: #fab219;
+  --accent-soft: rgba(57,135,229,.15);
+  --accent-line: rgba(57,135,229,.4);
+  --good: #3fb950;
+  --bad: #f47067;
+  --warn: #d29922;
   --bench: #d95926;
-  --s1: #3987e5; --s2: #199e70; --s3: #c98500; --s4: #d55181; --s5: #9085e9;
-  --radius: 10px;
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --row-hover: rgba(177,186,196,.05);
+  --shadow: 0 8px 30px rgba(1,4,9,.55);
+  --err-bg: rgba(244,112,103,.1); --err-line: rgba(244,112,103,.35); --err-text: #ffa198;
+  --ok-bg: rgba(63,185,80,.1);   --ok-line: rgba(63,185,80,.35);   --ok-text: #7ee787;
+  --info-text: #a5d6ff;
+  --pill-buy-bg: rgba(57,135,229,.18);   --pill-buy: #79b8ff;
+  --pill-sell-bg: rgba(217,89,38,.18);   --pill-sell: #ffa657;
+  --pill-in-bg: rgba(63,185,80,.16);     --pill-in: #7ee787;
+  --pill-out-bg: rgba(244,112,103,.16);  --pill-out: #ffa198;
+  --pill-corp-bg: rgba(144,133,233,.18); --pill-corp: #c4b5fd;
+  --err-row: rgba(244,112,103,.07);
+  --mark-bg: rgba(210,153,34,.35);
+  --picker-filter: invert(.8);
+  --chart-text: #8b949e;
+  --chart-grid: rgba(240,246,252,.05);
+  --chart-cross: #4d5562;
+  --chart-label: #30363d;
+  --net-line: #6e7681;
 }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --surface-2: #ffffff;
+  --surface-3: #eaeef2;
+  --border: #d0d7de;
+  --border-2: #c3ccd5;
+  --border-hover: #8c959f;
+  --text: #24292f;
+  --text-strong: #1f2328;
+  --text-2: #57606a;
+  --muted: #6e7781;
+  --accent: #0969da;
+  --accent-soft: rgba(9,105,218,.1);
+  --accent-line: rgba(9,105,218,.35);
+  --good: #1a7f37;
+  --bad: #cf222e;
+  --warn: #9a6700;
+  --bench: #bc4c00;
+  --row-hover: rgba(208,215,222,.32);
+  --shadow: 0 8px 24px rgba(140,149,159,.3);
+  --err-bg: #ffebe9; --err-line: rgba(207,34,46,.3); --err-text: #a40e26;
+  --ok-bg: #dafbe1;  --ok-line: rgba(26,127,55,.3); --ok-text: #116329;
+  --info-text: #0a3069;
+  --pill-buy-bg: #ddf4ff;  --pill-buy: #0550ae;
+  --pill-sell-bg: #fff1e5; --pill-sell: #953800;
+  --pill-in-bg: #dafbe1;   --pill-in: #116329;
+  --pill-out-bg: #ffebe9;  --pill-out: #a40e26;
+  --pill-corp-bg: #fbefff; --pill-corp: #6639ba;
+  --err-row: #fff5f5;
+  --mark-bg: #fff8c5;
+  --picker-filter: none;
+  --chart-text: #57606a;
+  --chart-grid: rgba(31,35,40,.07);
+  --chart-cross: #8c959f;
+  --chart-label: #57606a;
+  --net-line: #8c959f;
+}
+:root { --radius: 10px; --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
 .num, td, .kpi-v, .tile-v { font-variant-numeric: tabular-nums; }
+body, .topbar, .sidebar, .card, .tile, th, td, input, select, textarea, .btn, .seg, .seg button, .tabs button, .pill, .msg, .toast, .fpanel, .nav button {
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease; }
 a { color: var(--accent); }
 button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------- layout ---------- */
 .app { display: grid; grid-template-columns: 224px 1fr; grid-template-rows: auto 1fr; height: 100vh; }
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--surface); min-height: 64px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; width: 190px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; width: 190px; color: var(--text-strong); }
+.theme-btn { margin-left: auto; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--border-2); background: var(--surface-2); color: var(--text-2); cursor: pointer; padding: 0; transition: background-color .2s, color .2s, border-color .2s, transform .15s; }
+.theme-btn:hover { color: var(--text-strong); border-color: var(--border-hover); }
+.theme-btn:active { transform: scale(.94); }
+.theme-btn svg { width: 17px; height: 17px; }
+.theme-btn .i-moon { display: none; }
+:root[data-theme="light"] .theme-btn .i-sun { display: none; }
+:root[data-theme="light"] .theme-btn .i-moon { display: block; }
 .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #3987e5, #199e70); display: grid; place-items: center; font-size: 13px; color: #fff; }
 .menu-btn { display: none; background: none; border: 1px solid var(--border-2); border-radius: 8px; padding: 6px 9px; cursor: pointer; }
 .pf-select { background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 8px; padding: 7px 10px; min-width: 170px; max-width: 230px; }
 .kpis { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; flex: 1; }
 .kpi { display: flex; flex-direction: column; }
 .kpi-l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
-.kpi-v { font-size: 15px; font-weight: 600; }
+.kpi-v { font-size: 15px; font-weight: 600; color: var(--text-strong); }
 .kpi.big .kpi-v { font-size: 22px; font-weight: 700; }
 .status.top-status { display: none; }
 .side-status { margin-top: 22px; padding: 12px 10px 0; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 6px; }
@@ -69,8 +144,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 main { overflow-y: auto; padding: 20px 22px 60px; }
 .view { display: none; max-width: 1400px; margin: 0 auto; }
 .view.active { display: block; }
-h1 { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
-h2 { font-size: 15px; margin: 0; font-weight: 600; }
+h1 { font-size: 20px; margin: 0 0 4px; font-weight: 650; color: var(--text-strong); }
+h2 { font-size: 15px; margin: 0; font-weight: 600; color: var(--text-strong); }
 .sub { color: var(--text-2); margin: 0 0 18px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
 .card-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -78,7 +153,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .grid-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .tile-l { color: var(--muted); font-size: 12px; }
-.tile-v { font-size: 18px; font-weight: 650; margin-top: 2px; }
+.tile-v { font-size: 18px; font-weight: 650; margin-top: 2px; color: var(--text-strong); }
 .tile-s { font-size: 12px; color: var(--text-2); }
 .two-col { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
 
@@ -87,7 +162,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .seg button { background: none; border: 0; padding: 5px 10px; border-radius: 6px; color: var(--text-2); cursor: pointer; font-size: 12.5px; }
 .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: 0 0 0 1px var(--border-2) inset; }
 .btn { background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 8px; padding: 7px 13px; cursor: pointer; color: var(--text); white-space: nowrap; }
-.btn:hover { border-color: #4a5463; }
+.btn:hover { border-color: var(--border-hover); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.danger { color: var(--bad); }
@@ -95,16 +170,16 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .icon-btn { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 3px 5px; border-radius: 5px; }
 .icon-btn:hover { color: var(--text); background: var(--surface-3); }
 label.f { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--text-2); }
-input[type=text], input[type=number], input[type=date], input[type=password], select, textarea {
+input[type=text], input[type=number], input[type=date], input[type=password], input[type=search], select, textarea {
   background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 8px; padding: 8px 10px; outline: none; width: 100%; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.8); }
+input[type=date]::-webkit-calendar-picker-indicator { filter: var(--picker-filter); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 .hint { font-size: 12px; color: var(--muted); }
 .msg { padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 12px; }
-.msg.err { background: rgba(230,103,103,.1); border: 1px solid rgba(230,103,103,.35); color: #f2a3a3; }
-.msg.ok { background: rgba(43,178,76,.1); border: 1px solid rgba(43,178,76,.35); color: #8fdca3; }
-.msg.info { background: var(--accent-soft); border: 1px solid rgba(57,135,229,.35); color: #b8d4f5; }
+.msg.err { background: var(--err-bg); border: 1px solid var(--err-line); color: var(--err-text); }
+.msg.ok { background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ok-text); }
+.msg.info { background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--info-text); }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .tabs button { background: var(--surface-2); border: 1px solid var(--border); padding: 7px 12px; border-radius: 8px; cursor: pointer; color: var(--text-2); }
 .tabs button.on { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
@@ -124,7 +199,7 @@ th.sort { cursor: pointer; }
 th.sort:hover { color: var(--text); }
 td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
 tr:last-child td { border-bottom: 0; }
-tbody tr:hover td { background: rgba(255,255,255,.018); }
+tbody tr:hover td { background: var(--row-hover); }
 tfoot td { background: var(--surface-2); font-weight: 600; }
 .pos { color: var(--good); }
 .neg { color: var(--bad); }
@@ -132,12 +207,41 @@ tfoot td { background: var(--surface-2); font-weight: 600; }
 .sec-name { font-weight: 500; }
 .sec-code { font-size: 11.5px; color: var(--muted); }
 .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 5px; letter-spacing: .3px; }
-.pill.BUY { background: rgba(57,135,229,.16); color: #8cbcf2; }
-.pill.SELL { background: rgba(217,89,38,.16); color: #f0a07e; }
-.pill.DEPOSIT { background: rgba(43,178,76,.14); color: #86d69a; }
-.pill.WITHDRAW { background: rgba(230,103,103,.14); color: #f0a3a3; }
-.pill.DIVIDEND, .pill.BONUS, .pill.SPLIT { background: rgba(144,133,233,.16); color: #bcb4f3; }
-.err-row td { background: rgba(230,103,103,.07); }
+.pill.BUY { background: var(--pill-buy-bg); color: var(--pill-buy); }
+.pill.SELL { background: var(--pill-sell-bg); color: var(--pill-sell); }
+.pill.DEPOSIT { background: var(--pill-in-bg); color: var(--pill-in); }
+.pill.WITHDRAW { background: var(--pill-out-bg); color: var(--pill-out); }
+.pill.DIVIDEND, .pill.BONUS, .pill.SPLIT { background: var(--pill-corp-bg); color: var(--pill-corp); }
+.err-row td { background: var(--err-row); }
+
+/* ---------- Excel-style column filters ---------- */
+.th-in { display: inline-flex; align-items: center; gap: 4px; }
+th.l .th-in { justify-content: flex-start; }
+.fbtn { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; padding: 0; }
+.fbtn:hover { color: var(--text-strong); background: var(--surface-3); }
+.fbtn svg { width: 12px; height: 12px; }
+.fbtn.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.fbtn.open { border-color: var(--accent); }
+.sort-ind { color: var(--accent); font-size: 10px; }
+.fpanel { position: fixed; z-index: 60; width: 270px; background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 10px; box-shadow: var(--shadow); padding: 10px; font-size: 13px; color: var(--text); }
+.fpanel .fsort { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.fpanel .fsort button { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--text); text-align: left; }
+.fpanel .fsort button:hover { background: var(--accent-soft); }
+.fpanel .fsort button.on { color: var(--accent); font-weight: 600; }
+.fpanel input[type=search] { margin-bottom: 8px; padding: 6px 9px; width: 100%; }
+.fpanel .fall { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-weight: 600; border-bottom: 1px solid var(--border); margin-bottom: 4px; cursor: pointer; }
+.fpanel .flist { max-height: 220px; overflow-y: auto; }
+.fpanel .flist label { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.fpanel .flist label:hover { background: var(--row-hover); }
+.fpanel .flist .v { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpanel .flist .cnt { color: var(--muted); font-size: 11.5px; }
+.fpanel mark { background: var(--mark-bg); color: inherit; border-radius: 2px; padding: 0 1px; }
+.fpanel input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; margin: 0; }
+.fpanel .fbtns { display: flex; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.fpanel .fbtns .btn { flex: 1; padding: 6px 8px; font-size: 12.5px; }
+.fpanel .fmsg { color: var(--bad); font-size: 12px; margin-top: 6px; }
+.fempty { color: var(--muted); padding: 8px 6px; }
+.tot-row td { background: var(--surface-2); font-weight: 600; color: var(--text-strong); }
 
 /* ---------- chart ---------- */
 .chart-box { position: relative; height: 420px; }
@@ -154,7 +258,7 @@ tfoot td { background: var(--surface-2); font-weight: 600; }
 .alloc-row { display: grid; grid-template-columns: 1fr 70px; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 13px; }
 .alloc-bar { height: 6px; border-radius: 3px; background: var(--surface-3); margin-top: 4px; overflow: hidden; }
 .alloc-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
-.toast { position: fixed; bottom: 18px; right: 18px; background: var(--surface-3); border: 1px solid var(--border-2); padding: 11px 15px; border-radius: 10px; max-width: 380px; z-index: 50; box-shadow: 0 8px 30px rgba(0,0,0,.4); font-size: 13px; display: none; }
+.toast { position: fixed; bottom: 18px; right: 18px; background: var(--surface-3); border: 1px solid var(--border-2); padding: 11px 15px; border-radius: 10px; max-width: 380px; z-index: 50; box-shadow: var(--shadow); font-size: 13px; display: none; }
 .xirr-table td:first-child, .xirr-table th:first-child { text-align: left; }
 .kbd { font-family: ui-monospace, monospace; background: var(--surface-3); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 details summary { cursor: pointer; color: var(--text-2); }
@@ -164,7 +268,8 @@ details summary { cursor: pointer; color: var(--text-2); }
   .sidebar { position: fixed; top: 0; bottom: 0; left: 0; width: 240px; z-index: 40; transform: translateX(-100%); transition: transform .2s; }
   .sidebar.open { transform: none; }
   .menu-btn { display: inline-block; }
-  .brand { width: auto; }
+  .brand { width: auto; gap: 8px; }
+  .theme-btn { margin-left: 6px; }
   .two-col { grid-template-columns: 1fr; }
   main { padding: 16px; }
   .status.top-status { display: flex; align-items: flex-start; margin-left: 0; }
@@ -177,7 +282,12 @@ details summary { cursor: pointer; color: var(--text-2); }
 <div class="app">
   <header class="topbar">
     <button class="menu-btn" id="menuBtn" aria-label="Menu">☰</button>
-    <div class="brand"><div class="brand-mark">FL</div>Folio Lab</div>
+    <div class="brand"><div class="brand-mark">FL</div><span>Folio Lab</span>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Switch to light theme" title="Switch to light theme">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20.5 14.2A8.5 8.5 0 019.8 3.5 8.5 8.5 0 1020.5 14.2z"/></svg>
+      </button>
+    </div>
     <select class="pf-select" id="pfSelect" aria-label="Portfolio"></select>
     <div class="kpis" id="kpis"></div>
     <div class="status top-status">
@@ -245,7 +355,7 @@ details summary { cursor: pointer; color: var(--text-2); }
       <div class="card">
         <div class="card-h">
           <div class="seg" id="ledgerFilter"><button data-f="ALL" class="on">All</button><button data-f="TRADES">Buys &amp; sells</button><button data-f="CASH">Money in / out</button><button data-f="CORP">Dividends &amp; corporate actions</button></div>
-          <div class="row"><button class="btn sm" id="csvBtn">Download as Excel (CSV)</button><button class="btn sm primary" data-go="add">+ Add entry</button></div>
+          <div class="row"><button class="btn sm" id="resetFilters" hidden>Reset all filters</button><button class="btn sm" id="csvBtn">Download as Excel (CSV)</button><button class="btn sm primary" data-go="add">+ Add entry</button></div>
         </div>
         <div class="tbl-wrap"><table id="ledgerTbl"></table></div>
       </div>
@@ -415,8 +525,13 @@ const DEFAULT_TIERS = [
   { id: "micro", label: "Micro (rank 501-750)", slip: 0.35 },
   { id: "nano", label: "Nano (beyond rank 750)", slip: 0.50 },
 ];
-const SERIES_COLORS = ["#3987e5", "#199e70", "#c98500", "#d55181", "#9085e9", "#2bb24c"];
-const BENCH_COLOR = "#d95926";
+// Categorical series colours, stepped separately for each theme (validated palette)
+const SERIES = {
+  dark: ["#3987e5", "#199e70", "#c98500", "#d55181", "#9085e9", "#2bb24c"],
+  light: ["#2a78d6", "#1baf7a", "#b07800", "#d55181", "#4a3aa7", "#008300"],
+};
+const theme = () => (document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const TYPE_LABEL = { BUY: "Buy", SELL: "Sell", DEPOSIT: "Money in", WITHDRAW: "Money out", DIVIDEND: "Dividend", BONUS: "Bonus", SPLIT: "Split" };
 const ORDER = { DEPOSIT: 0, SPLIT: 1, BONUS: 1, SELL: 2, BUY: 3, DIVIDEND: 4, WITHDRAW: 5 };
 
@@ -874,12 +989,14 @@ async function loadRemote() {
     if (f.text) { prices = JSON.parse(f.text); lsSet(PX_KEY, prices); book = new PriceBook(prices); }
   } catch (e) { console.warn(e); }
   renderAll();
+  // official company names for every code (NSE/BSE lists), then show them everywhere
+  loadSymbols().then(() => renderAll()).catch(() => {});
 }
 
 async function loadSymbols() {
   if (symbols) return symbols;
   const cached = lsGet(SYM_KEY, null);
-  if (cached && cached.asof && cached.asof === (prices.last_trading_day || cached.asof)) { symbols = indexSymbols(cached); }
+  if (cached && cached.asof && cached.asof === prices.last_trading_day) { symbols = indexSymbols(cached); return symbols; } // already current
   try {
     const f = await readRepoFile("data/symbols.json", false);
     if (f.text) { const j = JSON.parse(f.text); lsSet(SYM_KEY, j); symbols = indexSymbols(j); }
@@ -947,7 +1064,7 @@ function curPf() {
   if (!p) { p = data.portfolios[0]; ui.pf = p.id; }
   return p;
 }
-const colorOf = p => SERIES_COLORS[Math.max(0, data.portfolios.indexOf(p)) % SERIES_COLORS.length];
+const colorOf = p => { const c = SERIES[theme()]; return c[Math.max(0, data.portfolios.indexOf(p)) % c.length]; };
 
 function renderAll() {
   computeAll();
@@ -980,6 +1097,7 @@ function renderChrome() {
 }
 
 function renderView() {
+  closeFilter();
   $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + ui.view));
   $$(".nav button[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === ui.view));
   lsSet(UI_KEY, { ...ui });
@@ -995,11 +1113,11 @@ function makeChart(el, fmt) {
   if (!window.LightweightCharts) { el.innerHTML = `<div class="empty">Chart library could not load (check internet connection).</div>`; return null; }
   return LightweightCharts.createChart(el, {
     autoSize: true,
-    layout: { attributionLogo: false, background: { type: "solid", color: "transparent" }, textColor: "#8b93a1", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11 },
-    grid: { vertLines: { color: "rgba(255,255,255,0.035)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
+    layout: { attributionLogo: false, background: { type: "solid", color: "transparent" }, textColor: cssVar("--chart-text"), fontFamily: "Inter, system-ui, sans-serif", fontSize: 11 },
+    grid: { vertLines: { color: cssVar("--chart-grid") }, horzLines: { color: cssVar("--chart-grid") } },
     rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.06 } },
     timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
-    crosshair: { mode: 0, vertLine: { color: "#4a5463", labelBackgroundColor: "#313844" }, horzLine: { color: "#4a5463", labelBackgroundColor: "#313844" } },
+    crosshair: { mode: 0, vertLine: { color: cssVar("--chart-cross"), labelBackgroundColor: cssVar("--chart-label") }, horzLine: { color: cssVar("--chart-cross"), labelBackgroundColor: cssVar("--chart-label") } },
     localization: { priceFormatter: fmt, locale: "en-IN" },
     handleScroll: false, handleScale: false,
     // attribution link is shown in the sidebar instead of the chart logo
@@ -1065,14 +1183,14 @@ function renderDashboard() {
     const n0 = win[0].nav, b0 = (win.find(x => x.bench != null) || {}).bench;
     drawLines("dash", $("#chart"), $("#legend"), [
       { name: p.name, color: colorOf(p), pts: win.map(x => ({ time: x.d, value: (x.nav / n0 - 1) * 100 })) },
-      { name: bn, color: BENCH_COLOR, dash: true, pts: b0 ? win.filter(x => x.bench != null).map(x => ({ time: x.d, value: (x.bench / b0 - 1) * 100 })) : [] },
+      { name: bn, color: cssVar("--bench"), dash: true, pts: b0 ? win.filter(x => x.bench != null).map(x => ({ time: x.d, value: (x.bench / b0 - 1) * 100 })) : [] },
     ], pctFmt);
   } else {
     $("#chartHint").textContent = `Portfolio value vs the same money added on the same dates into ${bn}. Grey line = money you put in (net).` + estNote(r);
     drawLines("dash", $("#chart"), $("#legend"), [
       { name: p.name, color: colorOf(p), pts: win.map(x => ({ time: x.d, value: x.value })) },
-      { name: `Same money in ${bn}`, color: BENCH_COLOR, dash: true, pts: win.filter(x => x.bValue != null).map(x => ({ time: x.d, value: x.bValue })) },
-      { name: "Money put in (net)", color: "#6f7886", step: true, pts: win.map(x => ({ time: x.d, value: x.netInv })) },
+      { name: `Same money in ${bn}`, color: cssVar("--bench"), dash: true, pts: win.filter(x => x.bValue != null).map(x => ({ time: x.d, value: x.bValue })) },
+      { name: "Money put in (net)", color: cssVar("--net-line"), step: true, pts: win.map(x => ({ time: x.d, value: x.netInv })) },
     ], inrFmt);
   }
   const tiles = [
@@ -1096,7 +1214,7 @@ function renderDashboard() {
   const items = r.holdings.slice().sort((a, b) => b.mv - a.mv).map(h => ({ n: h.name, c: h.key, v: h.mv }));
   items.push({ n: "Cash", c: "", v: r.cash });
   const tot = r.value || 1;
-  $("#alloc").innerHTML = items.map(i => `<div class="alloc-row"><div><div>${esc(i.n)} <span class="sec-code">${esc(i.c)}</span></div><div class="alloc-bar"><i style="width:${Math.max(0, i.v / tot * 100).toFixed(2)}%;${i.c ? "" : "background:#6f7886"}"></i></div></div><div class="num" style="text-align:right">${pct(i.v / tot, 1, false)}</div></div>`).join("");
+  $("#alloc").innerHTML = items.map(i => `<div class="alloc-row"><div><div>${esc(i.n)} <span class="sec-code">${esc(i.c)}</span></div><div class="alloc-bar"><i style="width:${Math.max(0, i.v / tot * 100).toFixed(2)}%;${i.c ? "" : "background:var(--net-line)"}"></i></div></div><div class="num" style="text-align:right">${pct(i.v / tot, 1, false)}</div></div>`).join("");
 }
 
 /* ---------- holdings ---------- */
@@ -1136,38 +1254,206 @@ function holdTxt(x) {
   if (x.type === "SELL" && x.maxD !== x.minD) return `${Math.round(x.holdDays)} days <span class="dim">(${x.minD}-${x.maxD})</span>`;
   return `${Math.round(x.holdDays)} days${x.open ? ' <span class="dim">(open)</span>' : ""}`;
 }
+/* Transactions report: every column filterable and sortable like Excel.
+   Filters and sort are kept per portfolio in ui.lf / ui.lsort (label lists, so they survive a reload). */
+const secLabel = x => (x.key ? `${x.name} (${x.key})` : x.type === "DEPOSIT" ? "Money added" : x.type === "WITHDRAW" ? "Money withdrawn" : "");
+const isTrade = x => (x.type === "BUY" || x.type === "SELL") && x.c;
+const numCol = (k, t, val, fmt = v => inr(v)) => ({ k, t, kind: "num", val, label: x => { const v = val(x); return v == null ? null : fmt(v); } });
+const LCOLS = [
+  { k: "date", t: "Date", kind: "date", l: true, val: x => x.date, label: x => fdate(x.date) },
+  { k: "type", t: "Type", kind: "text", l: true, val: x => TYPE_LABEL[x.type], label: x => TYPE_LABEL[x.type] },
+  { k: "sec", t: "Security", kind: "text", l: true, val: x => secLabel(x).toUpperCase() || null, label: x => secLabel(x) || null },
+  numCol("qty", "Qty", x => x.qty ?? null, v => qtyFmt(v)),
+  numCol("price", "Rate", x => x.price ?? null),
+  numCol("val", "Value (qty × rate)", x => (isTrade(x) ? x.c.turnover : null)),
+  numCol("slip", "Slippage", x => (isTrade(x) ? x.c.slippage : null)),
+  numCol("chg", "Charges", x => (isTrade(x) ? x.c.charges : null)),
+  numCol("net", "Net amount", x => x.net ?? null),
+  numCol("eff", "Effective price", x => x.effPrice || null),
+  numCol("cost", "Buy cost (FIFO)", x => x.cost ?? null),
+  numCol("pnl", "Profit / loss", x => x.pnl ?? null),
+  numCol("ret", "Return", x => x.pnlPct ?? null, v => pct(v)),
+  numCol("hold", "Holding period", x => (x.holdDays == null ? null : Math.round(x.holdDays)), v => `${v} days`),
+  numCol("cash", "Cash after", x => x.cashAfter ?? null),
+];
+const BLANK = "(Blanks)";
+const SORT_TXT = { date: ["Oldest to newest", "Newest to oldest"], text: ["A to Z", "Z to A"], num: ["Low to high", "High to low"] };
+const FUNNEL = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 2h13a.5.5 0 01.4.8L10 9v4.4a.5.5 0 01-.7.4l-2.6-1.2a.5.5 0 01-.3-.5V9L1.1 2.8A.5.5 0 011.5 2z"/></svg>`;
+const colByKey = k => LCOLS.find(c => c.k === k);
+const lblOf = (c, x) => { const v = c.label(x); return v == null || v === "" ? BLANK : v; };
+const pfFilters = id => ((ui.lf = ui.lf || {})[id] = ui.lf[id] || {});
+const pfSort = id => (ui.lsort = ui.lsort || {})[id] || null;
+
+/** Rows after the quick filter and every column filter (optionally ignoring one column), then sorted. */
+function filteredLedger(r, pfId, exceptCol) {
+  const f = pfFilters(pfId);
+  let rows = ledgerRows(r, ui.ledgerF);
+  for (const k in f) {
+    if (k === exceptCol) continue;
+    const c = colByKey(k); if (!c) continue;
+    const allow = new Set(f[k]);
+    rows = rows.filter(x => allow.has(lblOf(c, x)));
+  }
+  const srt = pfSort(pfId);
+  if (srt && colByKey(srt.k)) {
+    const c = colByKey(srt.k);
+    rows = rows.slice().sort((a, b) => {
+      const va = c.val(a), vb = c.val(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;   // blanks always last
+      if (vb == null) return -1;
+      return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * srt.dir;
+    });
+  }
+  return rows;
+}
+function anyLedgerFilter(pfId) {
+  return Object.keys(pfFilters(pfId)).length > 0 || !!pfSort(pfId) || ui.ledgerF !== "ALL";
+}
+
 function renderLedger() {
   const p = curPf(); const t = $("#ledgerTbl");
   $$("#ledgerFilter button").forEach(b => b.classList.toggle("on", b.dataset.f === ui.ledgerF));
-  if (!p) { t.innerHTML = `<tbody><tr><td class="l">Create a portfolio first.</td></tr></tbody>`; return; }
-  const r = results[p.id], rows = ledgerRows(r, ui.ledgerF);
-  if (!rows.length) { t.innerHTML = `<tbody><tr><td class="l dim">Nothing recorded yet.</td></tr></tbody>`; return; }
-  t.innerHTML = `<thead><tr><th class="l">Date</th><th class="l">Type</th><th class="l">Security</th><th>Qty</th><th>Rate</th><th>Value (qty × rate)</th><th>Slippage</th><th>Charges</th><th>Net amount</th><th>Effective price</th><th>Buy cost (FIFO)</th><th>Profit / loss</th><th>Return</th><th>Holding period</th><th>Cash after</th><th></th></tr></thead><tbody>` +
-    rows.map(x => {
-      const e = x.e, trade = x.type === "BUY" || x.type === "SELL";
-      const sec = x.key ? `<div class="sec-name">${esc(x.name)}</div><div class="sec-code">${esc(x.key)}${x.note ? " · " + esc(x.note) : ""}</div>` : `<span class="dim">${esc(e.note || (x.type === "DEPOSIT" ? "Money added" : "Money withdrawn"))}</span>`;
-      return `<tr class="${x.error ? "err-row" : ""}" title="${esc(x.error || "")}">
-        <td class="l">${fdate(x.date)}</td><td class="l"><span class="pill ${x.type}">${TYPE_LABEL[x.type]}</span></td><td class="l">${sec}${x.error ? `<div class="neg" style="font-size:12px;white-space:normal">⚠ ${esc(x.error)}</div>` : ""}</td>
-        <td>${x.qty != null ? qtyFmt(x.qty) : ""}</td>
-        <td>${x.price != null ? inr(x.price) : ""}</td>
-        <td>${trade && x.c ? inr(x.c.turnover) : ""}</td>
-        <td>${trade && x.c ? inr(x.c.slippage) : ""}</td>
-        <td title="${esc(chargeTip(x.c))}" style="${x.c ? "text-decoration:underline dotted;cursor:help" : ""}">${trade && x.c ? inr(x.c.charges) : ""}</td>
-        <td>${x.net != null ? signed(x.net) : ""}</td>
-        <td>${x.effPrice ? inr(x.effPrice) : ""}</td>
-        <td>${x.cost != null ? inr(x.cost) : ""}</td>
-        <td>${x.pnl != null ? signed(x.pnl) + (x.open ? '<div class="sec-code">unbooked</div>' : "") : ""}</td>
-        <td class="${cls(x.pnlPct)}">${x.pnlPct != null ? pct(x.pnlPct) : ""}</td>
-        <td>${holdTxt(x)}</td>
-        <td>${inr(x.cashAfter)}</td>
-        <td><button class="icon-btn" data-edit="${esc(x.id)}" title="Edit">✎</button><button class="icon-btn" data-del="${esc(x.id)}" title="Delete">✕</button></td></tr>`;
-    }).join("") + `</tbody>`;
+  if (!p) { t.innerHTML = `<tbody><tr><td class="l">Create a portfolio first.</td></tr></tbody>`; $("#resetFilters").hidden = true; return; }
+  const r = results[p.id];
+  if (!r.rows.length) { t.innerHTML = `<tbody><tr><td class="l dim">Nothing recorded yet.</td></tr></tbody>`; $("#resetFilters").hidden = true; return; }
+  const f = pfFilters(p.id), srt = pfSort(p.id), rows = filteredLedger(r, p.id);
+  $("#resetFilters").hidden = !anyLedgerFilter(p.id);
+  $("#csvBtn").textContent = anyLedgerFilter(p.id) ? "Download shown rows (CSV)" : "Download as Excel (CSV)";
+  const head = LCOLS.map(c => `<th class="${c.l ? "l" : ""}"><span class="th-in">${c.l ? "" : sortInd(c, srt)}<span>${c.t}</span>${c.l ? sortInd(c, srt) : ""}<button class="fbtn ${f[c.k] ? "on" : ""} ${fp && fp.col === c.k ? "open" : ""}" data-fcol="${c.k}" type="button" aria-label="Filter and sort ${c.t}" title="Filter and sort">${FUNNEL}</button></span></th>`).join("") + `<th></th>`;
+  const body = rows.map(x => {
+    const e = x.e, trade = x.type === "BUY" || x.type === "SELL";
+    const sec = x.key ? `<div class="sec-name">${esc(x.name)}</div><div class="sec-code">${esc(x.key)}${x.note ? " · " + esc(x.note) : ""}</div>` : `<span class="dim">${esc(e.note || (x.type === "DEPOSIT" ? "Money added" : "Money withdrawn"))}</span>`;
+    return `<tr class="${x.error ? "err-row" : ""}" title="${esc(x.error || "")}">
+      <td class="l">${fdate(x.date)}</td><td class="l"><span class="pill ${x.type}">${TYPE_LABEL[x.type]}</span></td><td class="l">${sec}${x.error ? `<div class="neg" style="font-size:12px;white-space:normal">⚠ ${esc(x.error)}</div>` : ""}</td>
+      <td>${x.qty != null ? qtyFmt(x.qty) : ""}</td>
+      <td>${x.price != null ? inr(x.price) : ""}</td>
+      <td>${trade && x.c ? inr(x.c.turnover) : ""}</td>
+      <td>${trade && x.c ? inr(x.c.slippage) : ""}</td>
+      <td title="${esc(chargeTip(x.c))}" style="${x.c ? "text-decoration:underline dotted;cursor:help" : ""}">${trade && x.c ? inr(x.c.charges) : ""}</td>
+      <td>${x.net != null ? signed(x.net) : ""}</td>
+      <td>${x.effPrice ? inr(x.effPrice) : ""}</td>
+      <td>${x.cost != null ? inr(x.cost) : ""}</td>
+      <td>${x.pnl != null ? signed(x.pnl) + (x.open ? '<div class="sec-code">unbooked</div>' : "") : ""}</td>
+      <td class="${cls(x.pnlPct)}">${x.pnlPct != null ? pct(x.pnlPct) : ""}</td>
+      <td>${holdTxt(x)}</td>
+      <td>${inr(x.cashAfter)}</td>
+      <td><button class="icon-btn" data-edit="${esc(x.id)}" title="Edit">✎</button><button class="icon-btn" data-del="${esc(x.id)}" title="Delete">✕</button></td></tr>`;
+  }).join("");
+  // totals of the rows currently shown
+  const sum = fn => rows.reduce((a, x) => a + (fn(x) || 0), 0);
+  const booked = sum(x => (x.open ? 0 : x.pnl)), unbooked = sum(x => (x.open ? x.pnl : 0));
+  const foot = rows.length ? `<tfoot><tr class="tot-row"><td class="l" colspan="3">Total of ${rows.length} shown ${rows.length === 1 ? "entry" : "entries"}${rows.length < r.rows.length ? ` (of ${r.rows.length})` : ""}</td><td></td><td></td>
+      <td>${inr(sum(x => (isTrade(x) ? x.c.turnover : 0)))}</td><td>${inr(sum(x => (isTrade(x) ? x.c.slippage : 0)))}</td><td>${inr(sum(x => (isTrade(x) ? x.c.charges : 0)))}</td>
+      <td>${signed(sum(x => x.net))}</td><td></td><td>${inr(sum(x => x.cost))}</td>
+      <td title="Booked (sales and dividends) and unbooked (shares still held) shown separately">${signed(booked + unbooked)}<div class="sec-code">booked ${inr(booked, 0)} · unbooked ${inr(unbooked, 0)}</div></td><td></td><td></td><td></td><td></td></tr></tfoot>` : "";
+  t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body || `<tr><td class="l dim" colspan="${LCOLS.length + 1}">No entries match the filters. <a href="#" id="resetInline">Reset all filters</a></td></tr>`}</tbody>${foot}`;
+  const ri = $("#resetInline"); if (ri) ri.onclick = ev => { ev.preventDefault(); resetLedgerFilters(); };
 }
-function csvFor(ps) {
+function sortInd(c, srt) { return srt && srt.k === c.k ? `<span class="sort-ind">${srt.dir > 0 ? "▲" : "▼"}</span>` : ""; }
+function resetLedgerFilters() {
+  const p = curPf(); if (!p) return;
+  (ui.lf = ui.lf || {})[p.id] = {};
+  if (ui.lsort) delete ui.lsort[p.id];
+  ui.ledgerF = "ALL";
+  closeFilter(); renderLedger(); lsSet(UI_KEY, { ...ui });
+}
+
+/* ---- the floating filter panel ---- */
+let fp = null; // { col, items: [{label, sortVal, count, checked}], search }
+function openFilter(colKey, btn) {
+  const p = curPf(); if (!p) return;
+  if (fp && fp.col === colKey) return closeFilter();
+  closeFilter();
+  const c = colByKey(colKey), r = results[p.id];
+  const cur = pfFilters(p.id)[colKey];
+  const curSet = cur ? new Set(cur) : null;
+  const base = filteredLedger(r, p.id, colKey);           // values available given the OTHER filters
+  const map = new Map();
+  for (const x of base) {
+    const lb = lblOf(c, x);
+    const m = map.get(lb) || { label: lb, sortVal: c.val(x), count: 0 };
+    m.count++; map.set(lb, m);
+  }
+  if (curSet) for (const lb of curSet) if (!map.has(lb)) map.set(lb, { label: lb, sortVal: null, count: 0 });
+  const items = [...map.values()].sort((a, b) => {
+    if (a.label === BLANK) return 1; if (b.label === BLANK) return -1;
+    if (a.sortVal == null || b.sortVal == null) return a.label.localeCompare(b.label);
+    return typeof a.sortVal === "string" ? a.sortVal.localeCompare(b.sortVal) : a.sortVal - b.sortVal;
+  });
+  for (const it of items) it.checked = curSet ? curSet.has(it.label) : true;
+  fp = { col: colKey, items, search: "" };
+  const srt = pfSort(p.id), [ascTxt, descTxt] = SORT_TXT[c.kind];
+  const el = document.createElement("div");
+  el.className = "fpanel"; el.id = "fpanel"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", `Filter ${c.t}`);
+  el.innerHTML = `<div class="fsort">
+      <button type="button" data-fsort="1" class="${srt && srt.k === colKey && srt.dir > 0 ? "on" : ""}">▲ Sort ${ascTxt}</button>
+      <button type="button" data-fsort="-1" class="${srt && srt.k === colKey && srt.dir < 0 ? "on" : ""}">▼ Sort ${descTxt}</button></div>
+    <input type="search" id="fSearch" placeholder="Search ${esc(c.t.toLowerCase())}" autocomplete="off">
+    <label class="fall"><input type="checkbox" id="fAll"> <span>(Select all)</span></label>
+    <div class="flist" id="fList"></div>
+    <div class="fmsg" id="fMsg"></div>
+    <div class="fbtns"><button type="button" class="btn primary" data-fact="apply">Apply</button><button type="button" class="btn" data-fact="clear">Clear filter</button><button type="button" class="btn" data-fact="close">Close</button></div>`;
+  document.body.appendChild(el);
+  const rc = btn.getBoundingClientRect();
+  el.style.top = Math.min(rc.bottom + 6, window.innerHeight - el.offsetHeight - 8) + "px";
+  el.style.left = Math.max(8, Math.min(rc.left - 8, window.innerWidth - el.offsetWidth - 8)) + "px";
+  btn.classList.add("open");
+  drawFilterList();
+  $("#fSearch").addEventListener("input", e => { fp.search = e.target.value; drawFilterList(); });
+  $("#fSearch").addEventListener("keydown", e => { if (e.key === "Enter") applyFilter(); });
+  $("#fAll").addEventListener("change", e => { for (const it of visibleItems()) it.checked = e.target.checked; drawFilterList(); });
+  $("#fList").addEventListener("change", e => { const i = e.target.dataset.i; if (i != null) { fp.items[i].checked = e.target.checked; syncAll(); } });
+  el.addEventListener("click", e => {
+    const sb = e.target.closest("[data-fsort]");
+    if (sb) { (ui.lsort = ui.lsort || {})[p.id] = { k: colKey, dir: +sb.dataset.fsort }; closeFilter(); renderLedger(); lsSet(UI_KEY, { ...ui }); return; }
+    const ab = e.target.closest("[data-fact]"); if (!ab) return;
+    if (ab.dataset.fact === "apply") applyFilter();
+    else if (ab.dataset.fact === "clear") { delete pfFilters(p.id)[colKey]; closeFilter(); renderLedger(); lsSet(UI_KEY, { ...ui }); }
+    else closeFilter();
+  });
+  setTimeout(() => $("#fSearch") && $("#fSearch").focus(), 0);
+}
+function visibleItems() {
+  const q = fp.search.trim().toLowerCase();
+  return q ? fp.items.filter(it => it.label.toLowerCase().includes(q)) : fp.items;
+}
+function hl(label) {
+  const q = fp.search.trim(); if (!q) return esc(label);
+  const i = label.toLowerCase().indexOf(q.toLowerCase());
+  return i < 0 ? esc(label) : esc(label.slice(0, i)) + "<mark>" + esc(label.slice(i, i + q.length)) + "</mark>" + esc(label.slice(i + q.length));
+}
+function drawFilterList() {
+  const vis = new Set(visibleItems());
+  $("#fList").innerHTML = fp.items.map((it, i) => vis.has(it) ? `<label><input type="checkbox" data-i="${i}" ${it.checked ? "checked" : ""}><span class="v" title="${esc(it.label)}">${hl(it.label)}</span><span class="cnt">${it.count || ""}</span></label>` : "").join("") || `<div class="fempty">No matches</div>`;
+  syncAll();
+}
+function syncAll() {
+  const vis = visibleItems(), n = vis.filter(it => it.checked).length, all = $("#fAll");
+  all.checked = vis.length > 0 && n === vis.length;
+  all.indeterminate = n > 0 && n < vis.length;
+  $("#fMsg").textContent = "";
+}
+function applyFilter() {
+  const p = curPf(); if (!p || !fp) return;
+  // like Excel: when a search is typed, only the checked values among the search results are kept
+  const pool = fp.search.trim() ? visibleItems() : fp.items;
+  const keep = pool.filter(it => it.checked).map(it => it.label);
+  if (!keep.length) { $("#fMsg").textContent = "Tick at least one value."; return; }
+  const f = pfFilters(p.id);
+  if (keep.length === fp.items.length && !fp.search.trim()) delete f[fp.col]; else f[fp.col] = keep;
+  closeFilter(); renderLedger(); lsSet(UI_KEY, { ...ui });
+}
+function closeFilter() {
+  const el = $("#fpanel"); if (el) el.remove();
+  $$(".fbtn.open").forEach(b => b.classList.remove("open"));
+  fp = null;
+}
+function csvFor(ps, onlyRows) {
   const head = ["Portfolio", "Date", "Type", "Exchange:Code", "Security", "Qty", "Rate", "Value", "Slippage", "Brokerage", "STT", "Transaction charge", "SEBI fee", "Stamp duty", "GST", "Depository", "Total charges", "Net amount", "Effective price", "Buy cost (FIFO)", "Profit/loss", "Return %", "Holding days", "Cash after", "Note"];
   const lines = [head];
   const n = v => (v == null || !isFinite(v) ? "" : (+v).toFixed(2));
-  for (const p of ps) for (const x of results[p.id].rows) {
+  for (const p of ps) for (const x of (onlyRows || results[p.id].rows)) {
     const c = x.c || {};
     lines.push([p.name, x.date, TYPE_LABEL[x.type], x.key || "", x.name || "", x.qty ?? "", n(x.price), n(c.turnover), n(c.slippage), n(c.brokerage), n(c.stt), n(c.txn), n(c.sebi), n(c.stamp), n(c.gst), n(c.dp), n(c.charges), n(x.net), n(x.effPrice), n(x.cost), n(x.pnl), x.pnlPct != null ? (x.pnlPct * 100).toFixed(2) : "", x.holdDays != null ? Math.round(x.holdDays) : "", n(x.cashAfter), (x.e.note || x.note || "") + (x.error ? " ERROR: " + x.error : "")]);
   }
@@ -1225,7 +1511,7 @@ function renderCompare() {
   });
   const bd = book.dates(bk).filter(d => d >= start && d <= last);
   const b0 = bd.length ? book.exact(bk, bd[0]) : null;
-  lines.push({ name: benchLabel(bk.slice(4)), color: BENCH_COLOR, dash: true, pts: b0 ? bd.map(d => ({ time: d, value: (book.exact(bk, d) / b0 - 1) * 100 })) : [] });
+  lines.push({ name: benchLabel(bk.slice(4)), color: cssVar("--bench"), dash: true, pts: b0 ? bd.map(d => ({ time: d, value: (book.exact(bk, d) / b0 - 1) * 100 })) : [] });
   drawLines("cmp", $("#cmpChart"), $("#cmpLegend"), lines, pctFmt);
   $("#cmpTbl").innerHTML = `<thead><tr><th class="l">Portfolio</th><th class="l">Strategy</th><th>Started</th><th>Money put in</th><th>Value</th><th>Total gain</th><th>XIRR</th><th>Own benchmark XIRR</th><th>Difference</th><th>Fund XIRR</th><th>Time-weighted</th><th>Worst fall</th><th>Stocks</th><th>Cash %</th></tr></thead><tbody>` +
     data.portfolios.map(p => { const r = results[p.id]; return `<tr><td class="l"><span class="dot" style="background:${colorOf(p)}"></span>${esc(p.name)}</td><td class="l dim" style="white-space:normal;max-width:260px">${esc(p.notes || "")}</td><td>${fdate(r.firstDate)}</td><td>${inr(r.netInvested || 0, 0)}</td><td>${inr(r.value, 0)}</td><td>${signed(r.gain || 0, v => inr(v, 0))}</td><td class="${cls(r.xirr)}">${pct(r.xirr)}</td><td>${pct(r.bXirr)} <span class="dim">${esc(benchLabel(p.benchmark))}</span></td><td class="${cls((r.xirr ?? 0) - (r.bXirr ?? 0))}">${r.xirr != null && r.bXirr != null ? pct(r.xirr - r.bXirr) : "–"}</td><td class="${cls(r.fundXirr)}">${pct(r.fundXirr)}</td><td class="${cls(r.twr)}">${pct(r.twr)}</td><td class="${cls(r.maxDD)}">${pct(r.maxDD)}</td><td>${r.holdings.length}</td><td>${r.value > 0 ? pct(r.cash / r.value, 1, false) : "–"}</td></tr>`; }).join("") + `</tbody>`;
@@ -1358,7 +1644,9 @@ function saveEntry() {
   const { pf, e } = readForm();
   const bad = basicCheck(e);
   if (bad) { $("#addMsg").innerHTML = `<div class="msg err">${esc(bad)}</div>`; return; }
-  const isNewKey = e.code && !book.has(keyOf(e));
+  // ask GitHub to fetch prices when this stock has no stored daily history reaching back to this trade
+  const ser = e.code && prices.series && prices.series[keyOf(e)];
+  const isNewKey = e.code && (!ser || (ser.hist_from || Object.keys(ser.px || {})[0] || "9999") > e.date);
   let err;
   if (form.editId) {
     const old = findEntry(form.editId);
@@ -1381,7 +1669,7 @@ function saveEntry() {
   ui.pf = pf;
   renderAll();
   $("#addMsg").innerHTML = `<div class="msg ok">${wasEdit ? "Entry updated" : "Saved"} ✓ Returns and XIRR are recalculated.</div>`;
-  if (isNewKey && (e.type === "BUY")) triggerUpdate(true);
+  if (isNewKey && (e.type === "BUY" || e.type === "SELL")) triggerUpdate(true);
 }
 function findEntry(id) {
   for (const p of data.portfolios) { const e = p.entries.find(x => x.id === id); if (e) return { p, e }; }
@@ -1478,15 +1766,38 @@ document.addEventListener("click", ev => {
 });
 $("#pfSelect").addEventListener("change", e => { ui.pf = e.target.value; renderChrome(); renderView(); });
 $("#menuBtn").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+function setTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem("folio_theme", t); } catch {}
+  const next = t === "light" ? "dark" : "light";
+  $("#themeBtn").setAttribute("aria-label", `Switch to ${next} theme`);
+  $("#themeBtn").title = `Switch to ${next} theme`;
+  renderChrome(); renderView(); // charts and series colours pick up the new theme
+}
+$("#themeBtn").addEventListener("click", () => setTheme(theme() === "light" ? "dark" : "light"));
+if (theme() === "light") { $("#themeBtn").setAttribute("aria-label", "Switch to dark theme"); $("#themeBtn").title = "Switch to dark theme"; }
 $("#modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ui.mode = b.dataset.m; renderDashboard(); } });
 $("#rangeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ui.range = b.dataset.r; renderDashboard(); } });
 $("#cmpRange").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ui.cmpRange = b.dataset.r; renderCompare(); } });
 $("#cmpBench").addEventListener("change", e => { ui.cmpBench = e.target.value; renderCompare(); });
-$("#ledgerFilter").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ui.ledgerF = b.dataset.f; renderLedger(); } });
+$("#ledgerFilter").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ui.ledgerF = b.dataset.f; closeFilter(); renderLedger(); lsSet(UI_KEY, { ...ui }); } });
 $("#typeTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const pf = $("#fPf") ? $("#fPf").value : ui.pf; form = { type: b.dataset.t, editId: null, vals: { pf } }; renderAdd(); });
 $("#saveEntry").addEventListener("click", saveEntry);
 $("#cancelEdit").addEventListener("click", () => { form = { type: form.type, editId: null, vals: { pf: ui.pf } }; renderAdd(); });
-$("#csvBtn").addEventListener("click", () => { const p = curPf(); if (p) download(`${p.name} transactions.csv`, csvFor([p]), "text/csv"); });
+$("#csvBtn").addEventListener("click", () => {
+  const p = curPf(); if (!p) return;
+  const filtered = anyLedgerFilter(p.id);
+  // when filters are active, export exactly the rows shown (oldest first, like a statement, unless a sort is set)
+  const rows = filtered ? filteredLedger(results[p.id], p.id) : null;
+  download(`${p.name} transactions${filtered ? " (filtered)" : ""}.csv`, csvFor([p], rows && (pfSort(p.id) ? rows : rows.slice().reverse())), "text/csv");
+});
+$("#resetFilters").addEventListener("click", resetLedgerFilters);
+$("#ledgerTbl").addEventListener("click", e => { const b = e.target.closest(".fbtn"); if (b) { e.stopPropagation(); openFilter(b.dataset.fcol, b); } });
+document.addEventListener("mousedown", e => { if (fp && !e.target.closest("#fpanel") && !e.target.closest(".fbtn")) closeFilter(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && fp) closeFilter(); });
+// any scroll outside the panel (page or the table's sideways scroll) closes it, so it never floats away from its column
+document.addEventListener("scroll", e => { if (fp && !(e.target.closest && e.target.closest("#fpanel"))) closeFilter(); }, { capture: true, passive: true });
+window.addEventListener("resize", () => fp && closeFilter());
 $("#csvAll").addEventListener("click", () => download(`All portfolios transactions.csv`, csvFor(data.portfolios), "text/csv"));
 $("#pfSave").addEventListener("click", savePortfolio);
 $("#pfCancel").addEventListener("click", () => { pfEdit = null; $("#pfName").value = ""; $("#pfNotes").value = ""; $("#pfSave").textContent = "Create portfolio"; $("#pfFormTitle").textContent = "Create a portfolio"; $("#pfCancel").style.display = "none"; $("#pfStart").closest("label").style.display = ""; $("#pfDate").closest("label").style.display = ""; });
