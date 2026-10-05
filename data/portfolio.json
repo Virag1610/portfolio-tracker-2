@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791227057233,
+ "updatedAt": 1791227097841,
  "seq": 10,
  "settings": {
   "charges": {
@@ -65,18 +65,6 @@
      "tier": "micro",
      "id": "cbesknrrsgg0",
      "seq": 5
-    },
-    {
-     "type": "BUY",
-     "date": "2026-04-29",
-     "note": "",
-     "exch": "NSE",
-     "code": "BHADORA",
-     "qty": 500,
-     "price": 52,
-     "tier": "nano",
-     "id": "nzryzpcdzn2l",
-     "seq": 6
     },
     {
      "type": "BUY",
