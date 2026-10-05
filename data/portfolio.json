@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791227660164,
- "seq": 17,
+ "updatedAt": 1791227721868,
+ "seq": 18,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -185,6 +185,18 @@
      "tier": "large",
      "id": "5ez4m3c8ok60",
      "seq": 16
+    },
+    {
+     "type": "BUY",
+     "date": "2026-09-16",
+     "note": "",
+     "exch": "NSE",
+     "code": "JGCHEM",
+     "qty": 100,
+     "price": 569,
+     "tier": "large",
+     "id": "pzr2yf0gqjrc",
+     "seq": 17
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
