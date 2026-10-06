@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791299530713,
+ "updatedAt": 1791299635016,
  "seq": 21,
  "settings": {
   "charges": {
@@ -216,7 +216,7 @@
      "type": "DEPOSIT",
      "date": "2024-10-06",
      "note": "",
-     "amount": 1000000,
+     "amount": 150000,
      "id": "omytn7a2e50e",
      "seq": 19
     },
