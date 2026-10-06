@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791299378031,
+ "updatedAt": 1791299421824,
  "seq": 21,
  "settings": {
   "charges": {
@@ -222,7 +222,7 @@
     },
     {
      "type": "BUY",
-     "date": "2026-10-06",
+     "date": "2024-10-24",
      "note": "",
      "exch": "NSE",
      "code": "BHADORA",
