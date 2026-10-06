@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308474103,
- "seq": 25,
+ "updatedAt": 1791308532450,
+ "seq": 26,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -245,6 +245,18 @@
      "tier": "large",
      "id": "67pwhw1mtcl1",
      "seq": 24
+    },
+    {
+     "type": "BUY",
+     "date": "2026-06-08",
+     "note": "",
+     "exch": "NSE",
+     "code": "MANINDS",
+     "qty": 100,
+     "price": 523,
+     "tier": "large",
+     "id": "rfpypcyyullr",
+     "seq": 25
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
