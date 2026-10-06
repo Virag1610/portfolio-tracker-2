@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308873921,
- "seq": 31,
+ "updatedAt": 1791308892700,
+ "seq": 32,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -317,6 +317,18 @@
      "tier": "large",
      "id": "f0rfdcw20673",
      "seq": 30
+    },
+    {
+     "type": "SELL",
+     "date": "2026-04-17",
+     "note": "",
+     "exch": "NSE",
+     "code": "KPL",
+     "qty": 30,
+     "price": 1714,
+     "tier": "micro",
+     "id": "0pc1f0cg2bko",
+     "seq": 31
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
