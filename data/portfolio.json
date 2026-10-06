@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791228712574,
+ "updatedAt": 1791299314552,
  "seq": 18,
  "settings": {
   "charges": {
@@ -204,6 +204,14 @@
    "name": "Virag + Dad",
    "notes": "",
    "createdAt": 1790968298596
+  },
+  {
+   "id": "s94w0txyd114",
+   "name": "WATCHLIST",
+   "benchmark": "NIFTY MICROCAP 250",
+   "notes": "",
+   "createdAt": 1791299314552,
+   "entries": []
   }
  ]
 }
