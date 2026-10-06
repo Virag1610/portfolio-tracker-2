@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308572281,
- "seq": 27,
+ "updatedAt": 1791308631424,
+ "seq": 28,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -269,6 +269,18 @@
      "tier": "large",
      "id": "93woa7wwvgc5",
      "seq": 26
+    },
+    {
+     "type": "BUY",
+     "date": "2026-08-21",
+     "note": "",
+     "exch": "NSE",
+     "code": "RML",
+     "qty": 100,
+     "price": 1107,
+     "tier": "large",
+     "id": "d3gw9t5uwpz2",
+     "seq": 27
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
