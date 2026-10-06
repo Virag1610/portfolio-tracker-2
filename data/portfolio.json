@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791299366368,
- "seq": 20,
+ "updatedAt": 1791299378031,
+ "seq": 21,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -219,6 +219,18 @@
      "amount": 1000000,
      "id": "omytn7a2e50e",
      "seq": 19
+    },
+    {
+     "type": "BUY",
+     "date": "2026-10-06",
+     "note": "",
+     "exch": "NSE",
+     "code": "BHADORA",
+     "qty": 1200,
+     "price": 123,
+     "tier": "nano",
+     "id": "dm2x1hukee0f",
+     "seq": 20
     }
    ]
   }
