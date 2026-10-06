@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308449843,
- "seq": 24,
+ "updatedAt": 1791308474103,
+ "seq": 25,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -233,6 +233,18 @@
      "tier": "large",
      "id": "q1m8ayfzstv6",
      "seq": 23
+    },
+    {
+     "type": "SELL",
+     "date": "2025-12-29",
+     "note": "",
+     "exch": "NSE",
+     "code": "JAYNECOIND",
+     "qty": 500,
+     "price": 83.1,
+     "tier": "large",
+     "id": "67pwhw1mtcl1",
+     "seq": 24
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
