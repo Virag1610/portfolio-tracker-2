@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791308792417,
+ "updatedAt": 1791308873921,
  "seq": 31,
  "settings": {
   "charges": {
@@ -58,8 +58,8 @@
      "type": "BUY",
      "date": "2025-03-27",
      "note": "",
-     "exch": "BSE",
-     "code": "539997",
+     "exch": "NSE",
+     "code": "KPL",
      "qty": 100,
      "price": 1155,
      "tier": "micro",
