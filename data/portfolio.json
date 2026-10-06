@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308753645,
- "seq": 30,
+ "updatedAt": 1791308792417,
+ "seq": 31,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -305,6 +305,18 @@
      "tier": "large",
      "id": "x22yo256zca2",
      "seq": 29
+    },
+    {
+     "type": "BUY",
+     "date": "2026-05-08",
+     "note": "",
+     "exch": "BSE",
+     "code": "539334",
+     "qty": 200,
+     "price": 422,
+     "tier": "large",
+     "id": "f0rfdcw20673",
+     "seq": 30
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
