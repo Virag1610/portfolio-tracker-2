@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308989511,
- "seq": 34,
+ "updatedAt": 1791309021145,
+ "seq": 35,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -353,6 +353,18 @@
      "tier": "large",
      "id": "v32tqh6n4e9x",
      "seq": 33
+    },
+    {
+     "type": "BUY",
+     "date": "2026-05-26",
+     "note": "",
+     "exch": "NSE",
+     "code": "SHILPAMED",
+     "qty": 100,
+     "price": 520,
+     "tier": "large",
+     "id": "mk2h9dhl52om",
+     "seq": 34
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
