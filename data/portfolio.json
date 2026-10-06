@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": 1791308655578,
+ "updatedAt": 1791308714343,
  "seq": 29,
  "settings": {
   "charges": {
@@ -193,7 +193,7 @@
      "exch": "NSE",
      "code": "JGCHEM",
      "qty": 100,
-     "price": 569,
+     "price": 575,
      "tier": "large",
      "id": "pzr2yf0gqjrc",
      "seq": 17
