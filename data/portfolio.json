@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308714343,
- "seq": 29,
+ "updatedAt": 1791308753645,
+ "seq": 30,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -293,6 +293,18 @@
      "tier": "large",
      "id": "yvki6kwax8m0",
      "seq": 28
+    },
+    {
+     "type": "BUY",
+     "date": "2026-09-28",
+     "note": "",
+     "exch": "NSE",
+     "code": "PRASOLCHEM",
+     "qty": 100,
+     "price": 745,
+     "tier": "large",
+     "id": "x22yo256zca2",
+     "seq": 29
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
