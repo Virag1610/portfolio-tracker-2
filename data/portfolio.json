@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1791308532450,
- "seq": 26,
+ "updatedAt": 1791308572281,
+ "seq": 27,
  "settings": {
   "charges": {
    "brokeragePct": 0,
@@ -257,6 +257,18 @@
      "tier": "large",
      "id": "rfpypcyyullr",
      "seq": 25
+    },
+    {
+     "type": "SELL",
+     "date": "2026-08-28",
+     "note": "",
+     "exch": "NSE",
+     "code": "MANINDS",
+     "qty": 50,
+     "price": 763.9,
+     "tier": "large",
+     "id": "93woa7wwvgc5",
+     "seq": 26
     }
    ],
    "benchmark": "NIFTY MICROCAP 250",
